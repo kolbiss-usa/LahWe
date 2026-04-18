@@ -420,8 +420,9 @@ function initState(){
     macroGoals:{protein:150,carbs:200,fat:60,cals:2000},
     macroLogs:{},
     schedule:{type:'weekly',weeklyDays:[1,2,4,5],cycleOn:2,cycleOff:1,
-      cycleStart:new Date().toISOString().split('T')[0],overrides:{}},
+      cycleStart:new Date().toISOString().split('T')[0],overrides:{},routineOverrides:{}},
     equipPreset:'full',
+    meals:[],
   };
 }
 function save(){try{localStorage.setItem('lahwe_v2',JSON.stringify(S));}catch(e){}}
@@ -442,6 +443,8 @@ function load(){
   def('schedule',{type:'weekly',weeklyDays:[1,2,4,5],cycleOn:2,cycleOff:1,
     cycleStart:new Date().toISOString().split('T')[0],overrides:{}});
   if(!S.schedule.overrides)S.schedule.overrides={};
+  if(!S.schedule.routineOverrides)S.schedule.routineOverrides={};
+  if(!S.meals)S.meals=[];
   if(S.calYear==null)S.calYear=new Date().getFullYear();
   if(S.calMonth==null)S.calMonth=new Date().getMonth();
   // Migrate old macro key names
@@ -484,6 +487,9 @@ function isTrainingDay(ds){
   const sch=S.schedule;if(!sch)return true;
   const ov=sch.overrides&&sch.overrides[ds];
   if(ov)return ov==='active';
+  const rovRid=sch.routineOverrides&&sch.routineOverrides[ds];
+  if(rovRid==='rest')return false;
+  if(rovRid)return true;
   if(sch.type==='weekly'){
     const dow=new Date(ds+'T12:00:00').getDay();
     return(sch.weeklyDays||[1,2,4,5]).includes(dow);
@@ -515,11 +521,19 @@ function getStreak(){
   return n;
 }
 
-// ─── Today's routine ───
-function getTodayRoutine(){
-  const dow=new Date().getDay();
-  return(S.routines||[]).find(r=>(r.days||[]).includes(dow))||null;
+// ─── Today's routines ───
+function wasRoutineDoneToday(rid){
+  const td=today();
+  return S.workouts.some(w=>w.routineId===rid&&new Date(w.started).toISOString().split('T')[0]===td);
 }
+function getTodayRoutines(){
+  const dow=new Date().getDay();const td=today();
+  const ovRid=S.schedule.routineOverrides&&S.schedule.routineOverrides[td];
+  if(ovRid==='rest')return[];
+  if(ovRid){const r=(S.routines||[]).find(x=>x.id===ovRid&&x.active!==false);return r?[r]:[];}
+  return(S.routines||[]).filter(r=>r.active!==false&&(r.days||[]).includes(dow));
+}
+function getTodayRoutine(){return getTodayRoutines()[0]||null;}
 
 // ─── Workout intelligence ───
 function getExStrData(exId){
@@ -697,14 +711,25 @@ function attachSwipeDown(ov){
   const handle=ov.querySelector('.mh');const modal=ov.querySelector('.modal');
   if(!handle||!modal)return;
   let startY=0,startT=0,dragging=false;
-  handle.addEventListener('touchstart',e=>{startY=e.touches[0].clientY;startT=Date.now();dragging=true;modal.style.transition='none';},{passive:true});
-  handle.addEventListener('touchmove',e=>{if(!dragging)return;const dy=e.touches[0].clientY-startY;if(dy>0)modal.style.transform=`translateY(${dy}px)`;},{passive:true});
-  handle.addEventListener('touchend',e=>{
+  handle.style.touchAction='none';
+  handle.addEventListener('pointerdown',e=>{
+    startY=e.clientY;startT=Date.now();dragging=true;
+    modal.style.transition='none';
+    try{handle.setPointerCapture(e.pointerId);}catch(ex){}
+  });
+  handle.addEventListener('pointermove',e=>{
+    if(!dragging)return;const dy=e.clientY-startY;
+    if(dy>0)modal.style.transform=`translateY(${dy}px)`;
+  });
+  handle.addEventListener('pointerup',e=>{
     if(!dragging)return;dragging=false;
-    const dy=e.changedTouches[0].clientY-startY,dt=Date.now()-startT;
+    const dy=e.clientY-startY,dt=Date.now()-startT;
     if(dy>80||dy/dt>0.5)dismissOv(ov);
     else{modal.style.transition='transform .22s cubic-bezier(.22,.61,.36,1)';modal.style.transform='';}
-  },{passive:true});
+  });
+  handle.addEventListener('pointercancel',()=>{
+    dragging=false;modal.style.transition='transform .22s cubic-bezier(.22,.61,.36,1)';modal.style.transform='';
+  });
 }
 function toast(msg,color){
   document.querySelectorAll('.toast').forEach(t=>t.remove());
@@ -824,7 +849,8 @@ function renderWorkout(c){
   const wkSets=wkWks.reduce((t,wk)=>t+doneSetCnt(wk),0);
   const wkVol=wkWks.reduce((t,wk)=>t+totalVol(wk),0);
   const wkCals=wkWks.reduce((t,wk)=>t+(wk.cals||0),0)+S.activities.filter(a=>new Date(a.date+'T12:00:00').getTime()>ago7).reduce((t,a)=>t+(a.cals||0),0);
-  const todayR=getTodayRoutine();
+  const todayRoutines=getTodayRoutines();
+  const todayR=todayRoutines[0]||null;
 
   let html=`<div style="padding:16px 13px 12px;display:flex;align-items:flex-start;justify-content:space-between">
     <div>
@@ -846,26 +872,31 @@ function renderWorkout(c){
   </div>`;
 
   // Today's routine card
-  if(todayR){
-    const lastSess=S.workouts.find(w=>w.routineId===todayR.id);
-    const exNames=todayR.exercises.slice(0,4).map(e=>getEx(e.exId)?.name||'').filter(Boolean);
+  if(todayRoutines.length){
+    html+=`<div class="hype-section">`;
+    todayRoutines.forEach(r=>{
+      const lastSess=S.workouts.find(w=>w.routineId===r.id);
+      const exNames=r.exercises.slice(0,4).map(e=>getEx(e.exId)?.name||'').filter(Boolean);
+      const doneToday=wasRoutineDoneToday(r.id);
+      html+=`<div class="routine-today"${todayRoutines.length>1?' style="margin-bottom:10px"':''}>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin-bottom:6px">Today's Workout</div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:-.03em;margin-bottom:4px">${r.name}</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:14px">${r.exercises.length} exercises${lastSess?` · Last done ${fmtShort(new Date(lastSess.started).toISOString())}`:''}${exNames.length?` · ${exNames.slice(0,3).join(', ')}${r.exercises.length>3?'…':''}`:''}</div>
+        ${doneToday
+          ?`<div style="background:rgba(45,122,82,.25);border:1px solid rgba(45,122,82,.4);border-radius:10px;padding:11px;text-align:center;font-size:14px;font-weight:600;color:#fff">✓ Completed today</div>`
+          :`<button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);width:100%;padding:11px;font-size:14px;border-radius:10px;backdrop-filter:blur(4px)" onclick="startWorkout('${r.id}')">▶  Start ${r.name}</button>`
+        }
+      </div>`;
+    });
+    html+=`</div>`;
+
+    // Intelligence feed
     const exIds=todayR.exercises.map(e=>e.exId);
     const wins=getProgressWins(exIds);
     const stag=getStagnantExercises(exIds);
     const painWs=getPainWarnings().filter(p=>exIds.includes(p.exId));
     const prox=getPRProximity();
     const momentum=getVolumeMomentum();
-
-    html+=`<div class="hype-section">
-      <div class="routine-today">
-        <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin-bottom:6px">Today's Workout</div>
-        <div style="font-size:22px;font-weight:700;letter-spacing:-.03em;margin-bottom:4px">${todayR.name}</div>
-        <div style="font-size:11px;opacity:.7;margin-bottom:14px">${todayR.exercises.length} exercises${lastSess?` · Last done ${fmtShort(new Date(lastSess.started).toISOString())}`:''}${exNames.length?` · ${exNames.slice(0,3).join(', ')}${todayR.exercises.length>3?'…':''}`:''}</div>
-        <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);width:100%;padding:11px;font-size:14px;border-radius:10px;backdrop-filter:blur(4px)" onclick="startWorkout('${todayR.id}')">▶  Start ${todayR.name}</button>
-      </div>
-    </div>`;
-
-    // Intelligence feed
     const feed=[];
     if(wins.length)wins.forEach(w=>feed.push({
       icon:'📈',color:'var(--green)',bg:'var(--grdim)',border:'rgba(45,122,82,.2)',
@@ -922,7 +953,7 @@ function renderWorkout(c){
   </div>`;
 
   // Other routines
-  const otherRoutines=(S.routines||[]).filter(r=>r.id!==todayR?.id);
+  const otherRoutines=(S.routines||[]).filter(r=>r.active!==false&&!todayRoutines.find(x=>x.id===r.id));
   if(otherRoutines.length){
     html+=`<div class="sec-lbl">Other Routines</div><div class="card">`;
     otherRoutines.forEach(r=>{
@@ -1330,13 +1361,17 @@ function renderCalendar(){
     const ds=`${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const data=wkMap[ds]||{w:0,a:0};const isToday=ds===td;const isRest=!isTrainingDay(ds);
     const dow=new Date(ds+'T12:00:00').getDay();const hasPlanned=routineDays[dow]?.length>0&&ds>=td&&!isRest;
-    html+=`<div class="cal-cell${isToday?' today':''}${isRest?' rest-day':''}" onclick="calDayTap('${ds}')">
+    const ovRid=S.schedule.routineOverrides&&S.schedule.routineOverrides[ds];
+    const hasRoutineOverride=ovRid&&ovRid!=='rest';
+    const isRestOverride=ovRid==='rest';
+    html+=`<div class="cal-cell${isToday?' today':''}${(isRest||isRestOverride)?' rest-day':''}" onclick="calDayTap('${ds}')">
       <div class="cal-date" style="font-size:${isToday?'11px':'12px'}">${d}</div>
       <div class="cal-dots">
         ${Array(data.w).fill(0).map(()=>`<div class="cal-dot" style="background:var(--navy)"></div>`).join('')}
         ${Array(data.a).fill(0).map(()=>`<div class="cal-dot" style="background:var(--gold)"></div>`).join('')}
         ${hasPlanned&&!data.w?`<div class="cal-dot" style="background:var(--border);border:1px solid var(--navy)"></div>`:''}
-        ${isRest&&!data.w?`<div style="font-size:7px;color:var(--muted2)">–</div>`:''}
+        ${hasRoutineOverride&&!data.w?`<div class="cal-dot" style="background:var(--blue);border:1px solid var(--blue)"></div>`:''}
+        ${(isRest||isRestOverride)&&!data.w?`<div style="font-size:7px;color:var(--muted2)">–</div>`:''}
       </div>
     </div>`;
   }
@@ -1352,15 +1387,43 @@ function renderCalendar(){
 function adjCal(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}if(S.calMonth<0){S.calMonth=11;S.calYear--;}renderHistory(document.getElementById('content'));}
 function calDayTap(ds){
   const isRest=!isTrainingDay(ds);
+  const ovRid=S.schedule.routineOverrides&&S.schedule.routineOverrides[ds];
+  const ovLabel=ovRid==='rest'?'Rest (override)':ovRid?(S.routines||[]).find(r=>r.id===ovRid)?.name||'Custom':null;
   const ov=makeOv('cal-tap-ov');
-  ov.innerHTML=`<div class="modal" style="max-height:340px"><div class="mh"></div>
+  ov.innerHTML=`<div class="modal" style="max-height:380px"><div class="mh"></div>
     <div style="font-size:14px;font-weight:600;margin-bottom:5px">${fmtDate(ds+'T12:00:00')}</div>
-    <div style="font-size:12px;color:${isRest?'var(--muted)':'var(--green)'};font-weight:600;margin-bottom:14px">${isRest?'Rest Day':'Training Day'}</div>
+    <div style="font-size:12px;color:${isRest?'var(--muted)':'var(--green)'};font-weight:600;margin-bottom:4px">${isRest?'Rest Day':'Training Day'}</div>
+    ${ovLabel?`<div style="font-size:11px;color:var(--blue);font-weight:500;margin-bottom:12px">Override active: ${ovLabel}</div>`:'<div style="margin-bottom:12px"></div>'}
+    <button class="btn bts bfw" style="margin-bottom:9px" onclick="dismissOv(document.getElementById('cal-tap-ov'));showRoutineOverridePicker('${ds}')">📅 Set Routine for This Day</button>
     <button class="btn bts bfw" style="margin-bottom:9px" onclick="dismissOv(document.getElementById('cal-tap-ov'));toggleDayOverride('${ds}')">${isRest?'Mark as Active':'Mark as Rest'}</button>
     ${ds<=today()?`<button class="btn btp bfw" style="margin-bottom:9px" onclick="dismissOv(document.getElementById('cal-tap-ov'));showLogActivity('${ds}')">+ Log Activity</button>`:''}
     <button class="btn btg bfw" onclick="dismissOv(document.getElementById('cal-tap-ov'))">Close</button>
   </div>`;
   document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function showRoutineOverridePicker(ds){
+  const ov=makeOv('rov-ov');
+  const current=S.schedule.routineOverrides&&S.schedule.routineOverrides[ds];
+  const activeRoutines=(S.routines||[]).filter(r=>r.active!==false);
+  ov.innerHTML=`<div class="modal" style="max-height:75vh"><div class="mh"></div>
+    <div class="mt">Routine for ${fmtShort(ds+'T12:00:00')}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">Override the scheduled routine for this date only. Your regular schedule stays unchanged.</div>
+    <button class="btn ${!current?'btp':'bts'} bfw" style="margin-bottom:8px" onclick="setRoutineOverride('${ds}',null)">Use Default Schedule</button>
+    <button class="btn ${current==='rest'?'btd':'bts'} bfw" style="margin-bottom:8px" onclick="setRoutineOverride('${ds}','rest')">Rest Day</button>
+    ${activeRoutines.map(r=>`<button class="btn ${current===r.id?'btp':'bts'} bfw" style="margin-bottom:8px" onclick="setRoutineOverride('${ds}','${r.id}')">${r.name}</button>`).join('')}
+    <button class="btn btg bfw" style="margin-top:4px" onclick="dismissOv(document.getElementById('rov-ov'))">Cancel</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function setRoutineOverride(ds,rid){
+  if(!S.schedule.routineOverrides)S.schedule.routineOverrides={};
+  if(rid===null)delete S.schedule.routineOverrides[ds];
+  else S.schedule.routineOverrides[ds]=rid;
+  save();
+  document.getElementById('rov-ov')?.remove();
+  renderHistory(document.getElementById('content'));
+  if(ds===today())render();
+  toast('Schedule updated','green');
 }
 function toggleDayOverride(ds){
   const isTrain=isTrainingDay(ds);
@@ -1566,21 +1629,40 @@ function getMacroStreak(){
   let n=0;const dt=new Date();dt.setDate(dt.getDate()-1);
   while(n<365){
     const ds=dt.toISOString().split('T')[0];
+    const todayMeals=(S.meals||[]).filter(m=>m.date===ds);
     const ml=S.macroLogs[ds];
-    if(!ml||(!ml.protein&&!ml.carbs&&!ml.fat))break;
+    const hasMeals=todayMeals.some(m=>m.protein||m.carbs||m.fat||m.cals);
+    const hasLog=ml&&(ml.protein||ml.carbs||ml.fat||ml.cals);
+    if(!hasMeals&&!hasLog)break;
     n++;dt.setDate(dt.getDate()-1);
   }
   return n;
 }
+function getDayTotals(ds){
+  const meals=(S.meals||[]).filter(m=>m.date===ds);
+  const ml=S.macroLogs[ds]||{};
+  if(meals.length){
+    return{
+      protein:meals.reduce((t,m)=>t+(parseFloat(m.protein)||0),0),
+      carbs:meals.reduce((t,m)=>t+(parseFloat(m.carbs)||0),0),
+      fat:meals.reduce((t,m)=>t+(parseFloat(m.fat)||0),0),
+      cals:meals.reduce((t,m)=>t+(parseFloat(m.cals)||0),0),
+      fromMeals:true
+    };
+  }
+  return{...ml,fromMeals:false};
+}
 function renderNutrition(c){
-  const td=today();const ml=S.macroLogs[td]||{};const g=S.macroGoals||{protein:150,carbs:200,fat:60,cals:2000};
+  const td=today();const ml=getDayTotals(td);const g=S.macroGoals||{protein:150,carbs:200,fat:60,cals:2000};
+  const todayMeals=(S.meals||[]).filter(m=>m.date===td);
   const bar=(val,goal,color)=>{const pct=goal>0?Math.min(100,Math.round((val/goal)*100)):0;return`<div class="macro-bar-track"><div class="macro-bar-fill" style="width:${pct}%;background:${color}"></div></div><div style="font-size:9px;color:var(--muted);margin-top:1px">${val||0} / ${goal}</div>`;};
   const hasMacros=!!(ml.protein||ml.carbs||ml.fat||ml.cals);
   const macroStreak=getMacroStreak();
 
   let html=`<div class="ph"><div class="page-title">Nutrition</div><div style="display:flex;gap:7px">
     <button class="btn bts bsm" onclick="showMacroGoals()">Goals</button>
-    <button class="btn btp bsm" onclick="showLogMacros()">+ Log</button>
+    <button class="btn bts bsm" onclick="showLogMacros()">Quick Log</button>
+    <button class="btn btp bsm" onclick="showAddMeal()">+ Meal</button>
   </div></div>`;
 
   if(macroStreak>=3)html+=`<div style="background:var(--grdim);border-bottom:1px solid rgba(45,122,82,.15);padding:9px 13px;display:flex;align-items:center;gap:9px"><div style="font-size:18px">🔥</div><div style="font-size:13px;font-weight:600;color:var(--green)">${macroStreak}-day tracking streak</div></div>`;
@@ -1606,9 +1688,26 @@ function renderNutrition(c){
         <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--green)">${ml.cals||0}<span style="font-size:10px;opacity:.5">kcal</span></div>
         ${bar(ml.cals||0,g.cals,'var(--green)')}
       </div>
-    </div>`:`<div style="text-align:center;padding:16px 0 6px"><div style="font-size:30px;margin-bottom:8px">🥩</div><div style="font-size:13px;font-weight:600">Nothing logged today</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Tap + Log to track your macros</div></div>`}
+    </div>`:`<div style="text-align:center;padding:16px 0 6px"><div style="font-size:30px;margin-bottom:8px">🥩</div><div style="font-size:13px;font-weight:600">Nothing logged today</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Tap + Meal to log by meal, or Quick Log for daily totals</div></div>`}
     </div>
   </div>`;
+
+  // Today's meals list
+  if(todayMeals.length){
+    html+=`<div style="padding:12px 13px 6px;display:flex;align-items:center;justify-content:space-between">
+      <div class="ct">Today's Meals</div>
+    </div>
+    <div class="card">`;
+    todayMeals.forEach(m=>{
+      html+=`<div class="hi"><div style="flex:1">
+        <div class="hn">${m.name||'Meal'}</div>
+        <div class="hm">${[m.protein?`P ${m.protein}g`:'',m.carbs?`C ${m.carbs}g`:'',m.fat?`F ${m.fat}g`:''].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0;margin-right:10px">${m.cals||0}kcal</div>
+      <button class="ib delbtn" style="font-size:11px" onclick="deleteMeal('${m.id}')">✕</button></div>`;
+    });
+    html+=`</div>`;
+  }
 
   // Protein insight
   if(S.bodyweight&&g.protein){
@@ -1622,17 +1721,24 @@ function renderNutrition(c){
   }
 
   // 5-day history
-  const recentDates=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i-1);return d.toISOString().split('T')[0];}).filter(ds=>S.macroLogs[ds]&&(S.macroLogs[ds].protein||S.macroLogs[ds].carbs||S.macroLogs[ds].fat||S.macroLogs[ds].cals));
+  const recentDates=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i-1);return d.toISOString().split('T')[0];}).filter(ds=>{
+    const meals=(S.meals||[]).filter(m=>m.date===ds);
+    const hasMeals=meals.some(m=>m.protein||m.carbs||m.fat||m.cals);
+    const ml2=S.macroLogs[ds];
+    const hasLog=ml2&&(ml2.protein||ml2.carbs||ml2.fat||ml2.cals);
+    return hasMeals||hasLog;
+  });
   if(recentDates.length){
     html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 13px 6px;margin-top:4px">
       <div class="ct">Recent Days</div>
       <button class="btn bxs bts" onclick="showRetroMacros()">+ Past Date</button>
     </div><div class="card">`;
-    recentDates.slice(0,5).forEach(ds=>{const ml2=S.macroLogs[ds];
+    recentDates.slice(0,5).forEach(ds=>{
+      const tot=getDayTotals(ds);
       html+=`<div class="hi" style="cursor:default"><div style="flex:1">
         <div class="hn">${fmtShort(ds+'T12:00:00')}</div>
-        <div class="hm">P ${ml2.protein||0}g · C ${ml2.carbs||0}g · F ${ml2.fat||0}g</div>
-      </div><div class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0">${ml2.cals||0}kcal</div></div>`;
+        <div class="hm">P ${tot.protein||0}g · C ${tot.carbs||0}g · F ${tot.fat||0}g${tot.fromMeals?` · ${(S.meals||[]).filter(m=>m.date===ds).length} meals`:''}</div>
+      </div><div class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0">${tot.cals||0}kcal</div></div>`;
     });
     html+=`</div>`;
   }else{
@@ -1712,6 +1818,68 @@ function showMacroGoals(){
   document.body.appendChild(ov);attachSwipeDown(ov);
 }
 function saveMacroGoals(){S.macroGoals={protein:parseFloat(document.getElementById('mg-pro')?.value)||150,carbs:parseFloat(document.getElementById('mg-carb')?.value)||200,fat:parseFloat(document.getElementById('mg-fat')?.value)||60,cals:parseInt(document.getElementById('mg-cal')?.value)||2000};save();dismissOv(document.getElementById('mg-ov'));toast('Goals updated','green');renderNutrition(document.getElementById('content'));}
+
+function showAddMeal(ds){
+  const date=ds||today();
+  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
+  const ov=makeOv('meal-ov');
+  ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">Log Meal</div>
+    <div class="fg"><label class="fl">Date</label><input type="date" id="meal-date" value="${date}" max="${today()}"></div>
+    <div class="fg"><label class="fl">Meal</label>
+      <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:6px">
+        ${MEAL_TYPES.map((t,i)=>`<button class="chip${i===0?' on':''}" id="mtype-${i}" onclick="selMealType(${i})" style="flex-shrink:0">${t}</button>`).join('')}
+      </div>
+      <input type="text" id="meal-name" placeholder="Or enter custom name" style="margin-top:2px">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
+      <div class="fg" style="margin-bottom:0"><label class="fl">Protein (g)</label><input type="number" inputmode="decimal" id="meal-pro" placeholder="0" oninput="autoCalcMeal()"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Carbs (g)</label><input type="number" inputmode="decimal" id="meal-carb" placeholder="0" oninput="autoCalcMeal()"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Fat (g)</label><input type="number" inputmode="decimal" id="meal-fat" placeholder="0" oninput="autoCalcMeal()"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Calories</label><input type="number" inputmode="numeric" id="meal-cal" placeholder="Auto"></div>
+    </div>
+    <button class="btn btp bfw" onclick="saveMeal()">Add Meal</button>
+    <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('meal-ov'))">Cancel</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  window._mealType=0;
+}
+function selMealType(i){
+  window._mealType=i;
+  document.querySelectorAll('#meal-ov .chip').forEach((c,j)=>c.classList.toggle('on',j===i));
+  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
+  const nameEl=document.getElementById('meal-name');
+  if(nameEl&&!nameEl.value)nameEl.placeholder=MEAL_TYPES[i]||'Meal';
+}
+function autoCalcMeal(){
+  const p=parseFloat(document.getElementById('meal-pro')?.value)||0;
+  const c=parseFloat(document.getElementById('meal-carb')?.value)||0;
+  const f=parseFloat(document.getElementById('meal-fat')?.value)||0;
+  const calEl=document.getElementById('meal-cal');
+  if(calEl&&!calEl.value)calEl.placeholder=Math.round(p*4+c*4+f*9)||'Auto';
+}
+function saveMeal(){
+  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
+  const nameEl=document.getElementById('meal-name');
+  const name=nameEl?.value?.trim()||MEAL_TYPES[window._mealType||0]||'Meal';
+  const p=parseFloat(document.getElementById('meal-pro')?.value)||0;
+  const carb=parseFloat(document.getElementById('meal-carb')?.value)||0;
+  const f=parseFloat(document.getElementById('meal-fat')?.value)||0;
+  const calEl=document.getElementById('meal-cal');
+  const cals=calEl?.value?parseFloat(calEl.value):Math.round(p*4+carb*4+f*9);
+  const date=document.getElementById('meal-date')?.value||today();
+  if(!p&&!carb&&!f&&!cals){toast('Enter at least one value');return;}
+  if(!S.meals)S.meals=[];
+  S.meals.push({id:uid(),date,name,protein:p,carbs:carb,fat:f,cals});
+  save();dismissOv(document.getElementById('meal-ov'));
+  toast(`${name} logged!`,'green');
+  renderNutrition(document.getElementById('content'));
+}
+function deleteMeal(id){
+  customConfirm('Remove this meal?','Remove',()=>{
+    S.meals=(S.meals||[]).filter(m=>m.id!==id);
+    save();renderNutrition(document.getElementById('content'));
+  });
+}
 // ═══════════════════════════════════════════════════
 // LIBRARY
 // ═══════════════════════════════════════════════════
@@ -1787,21 +1955,31 @@ function renderLibRoutines(){
   let html=`<div style="padding:9px 13px;display:flex;justify-content:flex-end"><button class="btn btp bsm" onclick="showCreateRoutine()">+ New Routine</button></div>`;
   if(!S.routines?.length)return html+`<div class="empty"><div style="font-size:36px;margin-bottom:10px">💪</div><div class="etit">No routines yet</div><p style="font-size:12px">Build your first routine to get started</p></div>`;
   const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  html+=`<div class="card">`;
-  S.routines.forEach(r=>{
+  const active=S.routines.filter(r=>r.active!==false);
+  const inactive=S.routines.filter(r=>r.active===false);
+  const renderRow=r=>{
     const last=S.workouts.find(w=>w.routineId===r.id);
     const names=r.exercises.slice(0,3).map(e=>getEx(e.exId)?.name||'').filter(Boolean);
     const days=(r.days||[]).map(d=>DOW[d]).join(', ');
-    html+=`<div class="hi" onclick="showRoutineDetail('${r.id}')">
+    const isInactive=r.active===false;
+    return`<div class="hi" onclick="showRoutineDetail('${r.id}')" style="${isInactive?'opacity:.5':''}">
       <div style="flex:1">
-        <div class="hn">${r.name}</div>
+        <div class="hn">${r.name}${isInactive?` <span style="font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--bg2);border-radius:3px;padding:1px 5px;margin-left:4px">Inactive</span>`:''}</div>
         <div class="hm">${r.exercises.length} exercises · ${last?'Last: '+fmtShort(new Date(last.started).toISOString()):'Never done'}</div>
-        ${days?`<div style="font-size:10px;color:var(--navy);font-weight:600;margin-top:2px">${days}</div>`:''} 
+        ${days?`<div style="font-size:10px;color:var(--navy);font-weight:600;margin-top:2px">${days}</div>`:''}
         ${names.length?`<div style="font-size:10px;color:var(--muted2);margin-top:1px">${names.join(' · ')}${r.exercises.length>3?'…':''}</div>`:''}
       </div><span style="color:var(--muted2);font-size:16px">›</span>
     </div>`;
-  });
-  html+=`</div>`;return html;
+  };
+  html+=`<div class="card">`;
+  active.forEach(r=>{html+=renderRow(r);});
+  html+=`</div>`;
+  if(inactive.length){
+    html+=`<div class="sec-lbl" style="margin-top:4px">Inactive</div><div class="card">`;
+    inactive.forEach(r=>{html+=renderRow(r);});
+    html+=`</div>`;
+  }
+  return html;
 }
 function renderLibEquipment(){
   const cur=S.equipPreset||'full';
@@ -1887,6 +2065,7 @@ function showRoutineDetail(rid){
     </div>
     <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:12px">${exHtml||'<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">No exercises</div></div>'}</div>
     <button class="btn bts bfw" style="margin-bottom:9px" onclick="showExPicker('${rid}')">+ Add Exercise</button>
+    <button class="btn ${r.active===false?'btok':'bts'} bfw" style="margin-bottom:9px" onclick="toggleRoutineActive('${rid}')">${r.active===false?'Activate Routine':'Deactivate Routine'}</button>
     <button class="btn btd bfw" onclick="delRoutine('${rid}')">Delete Routine</button>
     <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('rd-ov'))">Close</button>
   </div>`;
@@ -1900,6 +2079,12 @@ function togRoutineDay(rid,i){
   toast('Schedule updated','green');
 }
 function rmFromRoutine(rid,i){const r=S.routines.find(x=>x.id===rid);if(!r)return;r.exercises.splice(i,1);save();document.getElementById('rd-ov')?.remove();showRoutineDetail(rid);}
+function toggleRoutineActive(rid){
+  const r=S.routines.find(x=>x.id===rid);if(!r)return;
+  r.active=r.active===false?true:false;
+  save();document.getElementById('rd-ov')?.remove();showRoutineDetail(rid);
+  toast(r.active===false?'Routine deactivated':'Routine activated','green');
+}
 function delRoutine(rid){customConfirm('Delete this routine?','Delete',()=>{S.routines=S.routines.filter(r=>r.id!==rid);save();document.querySelector('#rd-ov')?.remove();renderLibrary(document.getElementById('content'));});}
 // ═══════════════════════════════════════════════════
 // SETTINGS
@@ -1952,6 +2137,14 @@ function showSettings(){
         <button class="tog${S.darkMode?' on':''}" id="dm-tog" onclick="toggleDark()"></button>
       </div>
     </div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:12px">
+      <label class="fl" style="margin-bottom:10px">Data</label>
+      <div class="frow">
+        <button class="btn bts bfw" onclick="exportData()">⬇ Export</button>
+        <button class="btn bts bfw" onclick="importData()">⬆ Import</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Export saves all your data as a JSON file. Import loads a backup — your current data will be replaced.</div>
+    </div>
     <button class="btn btp bfw" onclick="saveSettings()">Save</button>
     <button class="btn btd bfw" style="margin-top:10px" onclick="confirmReset()">Reset All Data</button>
     <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('set-ov'))">Cancel</button>
@@ -1969,7 +2162,14 @@ function renderSchedBody(sch){
     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:130px"><label class="fl" style="margin:0;white-space:nowrap">Days Off</label><input type="number" id="cyc-off" value="${sch.cycleOff||1}" style="width:60px;text-align:center;font-size:16px"></div>
   </div><div class="fg" style="margin-top:10px"><label class="fl">Start Date</label><input type="date" id="cyc-start" value="${sch.cycleStart||today()}"></div>`;
 }
-function setSchedType(type){S.schedule.type=type;save();const el=document.getElementById('sched-body');if(el)el.innerHTML=renderSchedBody(S.schedule);}
+function setSchedType(type){
+  S.schedule.type=type;save();
+  const el=document.getElementById('sched-body');if(el)el.innerHTML=renderSchedBody(S.schedule);
+  ['weekly','cycle'].forEach(t=>{
+    const btn=document.querySelector(`[onclick="setSchedType('${t}')"]`);
+    if(btn)btn.className=`btn ${t===type?'btp':'bts'} bfw`;
+  });
+}
 function toggleSchedDay(i){
   const days=S.schedule.weeklyDays||[1,2,4,5];const idx=days.indexOf(i);
   if(idx>=0)days.splice(idx,1);else days.push(i);
@@ -1978,7 +2178,13 @@ function toggleSchedDay(i){
 }
 function setGoal(id){S.goal=id;document.querySelectorAll('[id^="sg-"]').forEach(b=>{b.className=`btn ${b.id===`sg-${id}`?'btp':'bts'}`;b.style.cssText='font-size:11px;text-align:left;justify-content:flex-start;gap:6px;padding:9px 10px';});save();}
 function setUnit(u){S.unit=u;['lbs','kg'].forEach(x=>{const el=document.getElementById(`set-${x}`);if(el)el.className=`btn ${x===u?'btp':'bts'} bfw`;});save();}
-function setRest(v){S.restDur=v;save();}
+function setRest(v){
+  S.restDur=v;save();
+  [60,90,120,150,180].forEach(x=>{
+    const el=document.querySelector(`[onclick="setRest(${x})"]`);
+    if(el){el.className=`btn ${x===v?'btp':'bts'} bfw`;el.style.cssText='flex:1;padding:8px 0;font-size:12px';}
+  });
+}
 function saveSettings(){
   const n=document.getElementById('set-name')?.value?.trim();if(n)S.name=n;
   const bw=parseFloat(document.getElementById('set-bw')?.value);
@@ -1990,6 +2196,35 @@ function saveSettings(){
   save();dismissOv(document.getElementById('set-ov'));toast('Saved!','green');render();
 }
 function confirmReset(){customConfirm('All workouts, PRs, and settings will be permanently deleted.','Reset everything',()=>{initState();save();document.getElementById('set-ov')?.remove();render();});}
+function exportData(){
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=`lahwe-backup-${today()}.json`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('Data exported!','green');
+}
+function importData(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=e=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(typeof data!=='object'||(!data.workouts&&!data.routines))throw new Error('Invalid');
+        S=data;
+        if(!S.schedule)S.schedule={type:'weekly',weeklyDays:[1,2,4,5],cycleOn:2,cycleOff:1,cycleStart:today(),overrides:{},routineOverrides:{}};
+        if(!S.schedule.routineOverrides)S.schedule.routineOverrides={};
+        if(!S.meals)S.meals=[];
+        save();applyDark();
+        document.getElementById('set-ov')?.remove();
+        render();toast('Data imported!','green');
+      }catch(err){toast('Invalid backup file');}
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
 
 // ═══════════════════════════════════════════════════
 // PWA + INIT
