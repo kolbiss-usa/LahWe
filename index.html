@@ -426,6 +426,27 @@ const EXERCISES=[
   {id:'med-slam',name:'Medicine Ball Slam',cat:'Full Body',eq:'Medicine Ball',muscle:'Rectus Abdominis'},
   {id:'med-rot',name:'Med Ball Rotational Throw',cat:'Core',eq:'Medicine Ball',muscle:'Rectus Abdominis'},
   {id:'med-squat',name:'Med Ball Squat',cat:'Legs',eq:'Medicine Ball',muscle:'Quadriceps'},
+  // ── Additional Bodyweight ──
+  {id:'bw-squat',name:'Bodyweight Squat',cat:'Legs',eq:'Bodyweight',muscle:'Quadriceps'},
+  {id:'jump-squat',name:'Jump Squat',cat:'Legs',eq:'Bodyweight',muscle:'Quadriceps'},
+  {id:'pistol-squat',name:'Pistol Squat',cat:'Legs',eq:'Bodyweight',muscle:'Quadriceps'},
+  {id:'jump-lunge',name:'Jump Lunge',cat:'Legs',eq:'Bodyweight',muscle:'Gluteus Maximus'},
+  {id:'glute-bridge',name:'Glute Bridge',cat:'Legs',eq:'Bodyweight',muscle:'Gluteus Maximus'},
+  {id:'bw-calf',name:'Calf Raise (Bodyweight)',cat:'Legs',eq:'Bodyweight',muscle:'Gastrocnemius/Soleus'},
+  {id:'situp',name:'Sit-Up',cat:'Core',eq:'Bodyweight',muscle:'Rectus Abdominis'},
+  {id:'vup',name:'V-Up',cat:'Core',eq:'Bodyweight',muscle:'Rectus Abdominis'},
+  {id:'bicycle-crunch',name:'Bicycle Crunch',cat:'Core',eq:'Bodyweight',muscle:'Rectus Abdominis'},
+  {id:'flutter-kick',name:'Flutter Kick',cat:'Core',eq:'Bodyweight',muscle:'Rectus Abdominis'},
+  {id:'mountain-climber',name:'Mountain Climber',cat:'Core',eq:'Bodyweight',muscle:'Rectus Abdominis'},
+  {id:'superman',name:'Superman',cat:'Core',eq:'Bodyweight',muscle:'Trapezius'},
+  {id:'diamond-pu',name:'Diamond Push-Up',cat:'Triceps',eq:'Bodyweight',muscle:'Triceps Brachii'},
+  {id:'pike-pu',name:'Pike Push-Up',cat:'Shoulders',eq:'Bodyweight',muscle:'Deltoids'},
+  {id:'decline-pu',name:'Decline Push-Up',cat:'Chest',eq:'Bodyweight',muscle:'Pectoralis Major'},
+  {id:'wide-pu',name:'Wide Push-Up',cat:'Chest',eq:'Bodyweight',muscle:'Pectoralis Major'},
+  {id:'burpee',name:'Burpee',cat:'Full Body',eq:'Bodyweight',muscle:'Quadriceps'},
+  {id:'tuck-jump',name:'Tuck Jump',cat:'Full Body',eq:'Bodyweight',muscle:'Quadriceps'},
+  {id:'inchworm',name:'Inchworm',cat:'Full Body',eq:'Bodyweight',muscle:'Hamstrings'},
+  {id:'sprawl',name:'Sprawl',cat:'Full Body',eq:'Bodyweight',muscle:'Quadriceps'},
 ];
 const CATS=['All','Chest','Back','Shoulders','Biceps','Triceps','Legs','Core','Full Body'];
 const EQUIPMENT_PRESETS=[
@@ -2399,7 +2420,7 @@ let _cdTimer=null;
 
 function showCardDeckSetup(){
   const ov=makeOv('cd-setup-ov');
-  const exOpts=allEx().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  const exOpts=allEx().filter(e=>e.eq==='Bodyweight').map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   ov.innerHTML=`<div class="modal"><div class="mh"></div>
     <div class="mt">Card Deck Setup</div>
     <div class="fg">
@@ -2435,7 +2456,7 @@ function toggleCDSuit(sid){
   renderCDSuitAssigns();
 }
 function renderCDSuitAssigns(){
-  const exOpts=allEx().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  const exOpts=allEx().filter(e=>e.eq==='Bodyweight').map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   const active=SUITS.filter(s=>window._cdActiveSuits.has(s.id));
   const el=document.getElementById('cd-suit-assigns');if(!el)return;
   el.innerHTML=active.map(s=>`<div class="fg">
