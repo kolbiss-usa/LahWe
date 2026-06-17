@@ -54,12 +54,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
 .nb span{font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
 
 /* ── REST TIMER ── */
-#rest-float{position:fixed;bottom:calc(var(--nh) + var(--sb) + 20px);right:14px;z-index:150;display:none;cursor:pointer;touch-action:manipulation;filter:drop-shadow(0 4px 16px rgba(0,0,0,.18))}
-#rest-float.on{display:block;animation:popin .2s ease}
+.bm-blob{position:absolute;width:16%;aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%);filter:blur(8px);opacity:.5;mix-blend-mode:multiply;pointer-events:none}
+#rest-pill{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#fff;background:var(--red);padding:4px 9px;border-radius:6px;letter-spacing:.02em;cursor:pointer;touch-action:manipulation;white-space:nowrap;display:none;align-items:center;gap:5px;animation:popin .2s ease}
+#rest-pill.on{display:inline-flex}
+#rest-pill .rp-x{font-size:10px;opacity:.7;font-weight:700}
 @keyframes popin{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
-#rest-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);text-align:center;pointer-events:none}
-#rest-time{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500;color:var(--navy);display:block;line-height:1}
-#rest-word{font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px;display:block}
+#rest-label-removed{display:none}
 
 /* ── CARDS ── */
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin:0 13px 10px;overflow:hidden;box-shadow:var(--shadow)}
@@ -131,6 +131,9 @@ textarea{resize:none;line-height:1.6}
 .sl{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted2);text-align:center}
 .srow{display:grid;grid-template-columns:22px 1fr 1fr 52px 30px 24px;gap:4px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border)}
 .srow:last-child{border-bottom:none}.srow.done{background:rgba(39,114,74,.05)}
+.srow.warm{background:rgba(176,120,40,.045)}
+.srow.warm .sinp{opacity:.75}
+.srow.warm .snum{color:var(--gold);font-weight:700}
 .snum{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted2);text-align:center}
 .sinp{padding:7px 3px;font-size:15px;border-radius:7px;touch-action:manipulation}
 .sinp:disabled{background:transparent;border-color:transparent;color:var(--text)}
@@ -324,10 +327,6 @@ textarea{resize:none;line-height:1.6}
 </head>
 <body>
 <div id="app">
-  <div id="rest-float" onclick="skipRest()">
-    <svg width="64" height="64" viewBox="0 0 66 66"><circle cx="33" cy="33" r="28" fill="var(--card)" stroke="var(--border)" stroke-width="2.5"/><circle id="rc" cx="33" cy="33" r="28" fill="none" stroke="var(--navy)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="176" stroke-dashoffset="176" transform="rotate(-90 33 33)" style="transition:stroke-dashoffset 1s linear"/></svg>
-    <div id="rest-label"><span id="rest-time">1:30</span><span id="rest-word">REST</span></div>
-  </div>
   <div id="content"></div>
   <nav id="nav">
     <button class="nb on" onclick="go('workout')">
@@ -471,6 +470,69 @@ const MEV_MAV={
   'Rectus Abdominis':{mev:4,mav:16,lbl:'Core'},
   'Trapezius':{mev:4,mav:16,lbl:'Traps'},
 };
+// Secondary movers (counted at 0.5 sets). Primary mover is the exercise's own `muscle` (1.0).
+// Only muscles in the MEV_MAV taxonomy are tracked; pure isolations have no secondaries.
+const SEC_MUSCLE={
+  'bb-bench':['Deltoids','Triceps Brachii'],'inc-bench':['Deltoids','Triceps Brachii'],'dec-bench':['Deltoids','Triceps Brachii'],
+  'db-bench':['Deltoids','Triceps Brachii'],'inc-db-bench':['Deltoids','Triceps Brachii'],'db-fly':['Deltoids'],'cable-fly':['Deltoids'],
+  'pushup':['Deltoids','Triceps Brachii'],'chest-dip':['Deltoids','Triceps Brachii'],
+  'deadlift':['Gluteus Maximus','Quadriceps','Trapezius','Latissimus Dorsi'],'hex-dl':['Gluteus Maximus','Hamstrings','Trapezius'],
+  'pullup':['Biceps Brachii','Trapezius'],'chinup':['Biceps Brachii','Trapezius'],'bb-row':['Biceps Brachii','Trapezius'],
+  'lat-pd':['Biceps Brachii'],'cable-row':['Biceps Brachii','Trapezius'],'tbar-row':['Biceps Brachii','Trapezius'],'db-row':['Biceps Brachii','Trapezius'],
+  'ohp':['Triceps Brachii','Trapezius'],'db-ohp':['Triceps Brachii','Trapezius'],'face-pull':['Trapezius'],'arnold':['Triceps Brachii','Trapezius'],
+  'cgbp':['Pectoralis Major','Deltoids'],'tri-dip':['Pectoralis Major','Deltoids'],
+  'squat':['Gluteus Maximus','Hamstrings'],'front-squat':['Gluteus Maximus','Hamstrings','Rectus Abdominis'],'leg-press':['Gluteus Maximus','Hamstrings'],
+  'rdl':['Gluteus Maximus','Trapezius'],'hack-squat':['Gluteus Maximus','Hamstrings'],'lunge':['Gluteus Maximus','Hamstrings'],
+  'bss':['Quadriceps','Hamstrings'],'db-step':['Quadriceps','Hamstrings'],'hip-thrust':['Hamstrings'],
+  'sumo-dl':['Gluteus Maximus','Quadriceps','Trapezius','Latissimus Dorsi'],'goblet':['Gluteus Maximus','Hamstrings','Rectus Abdominis'],'glute-kick':['Hamstrings'],
+  'power-clean':['Gluteus Maximus','Quadriceps','Trapezius','Deltoids'],'kb-swing':['Hamstrings','Rectus Abdominis','Deltoids'],
+  'thruster':['Gluteus Maximus','Deltoids','Triceps Brachii'],'box-jump':['Gluteus Maximus','Hamstrings'],
+  'kb-clean':['Gluteus Maximus','Quadriceps','Trapezius','Deltoids'],'kb-press':['Triceps Brachii','Trapezius'],'kb-goblet':['Gluteus Maximus','Hamstrings'],'kb-row':['Biceps Brachii','Trapezius'],
+  'med-slam':['Latissimus Dorsi','Deltoids'],'med-squat':['Gluteus Maximus','Hamstrings'],
+  'bw-squat':['Gluteus Maximus','Hamstrings'],'jump-squat':['Gluteus Maximus','Hamstrings'],'pistol-squat':['Gluteus Maximus','Hamstrings'],
+  'jump-lunge':['Quadriceps','Hamstrings'],'glute-bridge':['Hamstrings'],
+  'diamond-pu':['Pectoralis Major','Deltoids'],'pike-pu':['Triceps Brachii'],'decline-pu':['Deltoids','Triceps Brachii'],'wide-pu':['Deltoids','Triceps Brachii'],
+  'burpee':['Gluteus Maximus','Pectoralis Major','Triceps Brachii'],'tuck-jump':['Gluteus Maximus','Hamstrings'],'inchworm':['Rectus Abdominis','Deltoids'],'sprawl':['Gluteus Maximus','Hamstrings'],
+  'mountain-climber':['Quadriceps','Deltoids'],'superman':['Gluteus Maximus'],
+};
+function muscleContribs(exId){
+  const info=getEx(exId);if(!info||!info.muscle)return[];
+  const out=[{muscle:info.muscle,w:1}];
+  (SEC_MUSCLE[exId]||[]).forEach(m=>{if(m!==info.muscle&&MEV_MAV[m])out.push({muscle:m,w:0.5});});
+  return out;
+}
+// Contribution-weighted working sets per muscle for completed workouts in [start,end).
+function muscleSetsInRange(start,end){
+  const m={};Object.keys(MEV_MAV).forEach(k=>m[k]=0);
+  S.workouts.filter(w=>w.started>=start&&w.started<end).forEach(wk=>{
+    wk.exercises.forEach(ex=>{
+      const done=ex.sets.filter(s=>s.done&&!s.warmup).length;if(!done)return;
+      muscleContribs(ex.exId).forEach(c=>{if(m[c.muscle]!==undefined)m[c.muscle]+=done*c.w;});
+    });
+  });
+  return m;
+}
+function fmtSets(x){return Number.isInteger(x)?String(x):x.toFixed(1);}
+// ─── Program evaluator (2-week basis) ───
+function inferDaysPerWeek(){const ago=Date.now()-28*86400000;const n=S.workouts.filter(w=>w.started>=ago).length;return n?Math.min(7,Math.max(1,Math.round(n/4))):4;}
+function goalVolScale(){return({strength:0.7,recomp:1.0,weightloss:0.85,general:0.85})[S.goal]||1.0;}
+function routineMuscleSets(routine){
+  const m={};(routine.exercises||[]).forEach(ex=>{const n=parseInt(ex.sets)||0;if(!n)return;muscleContribs(ex.exId).forEach(c=>{m[c.muscle]=(m[c.muscle]||0)+n*c.w;});});
+  return m;
+}
+// Projected contribution-weighted sets per muscle over a rolling 2 weeks for a group.
+function groupProjection(g){
+  const proj={};Object.keys(MEV_MAV).forEach(k=>proj[k]=0);
+  const routines=(g.routineIds||[]).map(id=>(S.routines||[]).find(r=>r.id===id)).filter(Boolean);
+  let sessions=0;
+  if(g.mode==='daypicker'){
+    routines.forEach(r=>{const days=((g.dayMap||{})[r.id]||[]).length;if(!days)return;sessions+=days*2;const ms=routineMuscleSets(r);Object.keys(ms).forEach(k=>{if(proj[k]!==undefined)proj[k]+=ms[k]*days*2;});});
+  }else{
+    const D=g.daysPerWeek||inferDaysPerWeek();const N=routines.length||1;sessions=Math.round(2*D);const runs=(2*D)/N;
+    routines.forEach(r=>{const ms=routineMuscleSets(r);Object.keys(ms).forEach(k=>{if(proj[k]!==undefined)proj[k]+=ms[k]*runs;});});
+  }
+  return{proj,sessions,nRoutines:routines.length};
+}
 const ACT_TYPES=[
   {id:'run',label:'Run',icon:'🏃',fields:['dist','dur'],mets:8},
   {id:'ruck',label:'Ruck March',icon:'🎒',fields:['dist','dur','ruckWeight','terrain'],mets:6},
@@ -588,6 +650,7 @@ function load(){
   def('histTab','list');def('equipPreset','full');
   def('macroGoals',{protein:150,carbs:200,fat:60,cals:2000});
   def('macroLogs',{});
+  def('groups',[]);
   def('schedule',{type:'weekly',weeklyDays:[1,2,4,5],cycleOn:2,cycleOff:1,
     cycleStart:new Date().toISOString().split('T')[0],overrides:{}});
   if(!S.schedule.overrides)S.schedule.overrides={};
@@ -614,8 +677,8 @@ function fmtTimer(s){const m=Math.floor(s/60),sec=s%60;return`${String(m).padSta
 function e1rm(w,r){return r===1?w:Math.round(w*(1+r/30));}
 function allEx(){return[...EXERCISES,...(S.custom||[])];}
 function getEx(id){return allEx().find(e=>e.id===id);}
-function totalVol(wk){return wk.exercises.reduce((t,ex)=>t+ex.sets.filter(s=>s.done).reduce((a,s)=>a+(parseFloat(s.w||0)*parseInt(s.r||0)),0),0);}
-function doneSetCnt(wk){return wk.exercises.reduce((t,ex)=>t+ex.sets.filter(s=>s.done).length,0);}
+function totalVol(wk){return wk.exercises.reduce((t,ex)=>t+ex.sets.filter(s=>s.done&&!s.warmup).reduce((a,s)=>a+(parseFloat(s.w||0)*parseInt(s.r||0)),0),0);}
+function doneSetCnt(wk){return wk.exercises.reduce((t,ex)=>t+ex.sets.filter(s=>s.done&&!s.warmup).length,0);}
 function bwKg(){return(S.bodyweight||185)/2.205;}
 function sessionCals(ms){return Math.round(4.5*bwKg()*(ms/3600000));}
 function activityCals(act){
@@ -658,16 +721,11 @@ function getStreak(){
     ...S.workouts.map(w=>new Date(w.started).toISOString().split('T')[0]),
     ...S.activities.map(a=>a.date)
   ]);
-  let n=0;const dt=new Date();
-  while(true){
-    const ds=dt.toISOString().split('T')[0];
-    if(ds>today()){dt.setDate(dt.getDate()-1);continue;}
-    const hasAct=actDates.has(ds);
-    const isRest=!isTrainingDay(ds);
-    if(!hasAct&&!isRest)break;
-    if(hasAct)n++;
-    dt.setDate(dt.getDate()-1);
-  }
+  const dt=new Date();
+  // An empty today doesn't break the streak — count back from yesterday in that case.
+  if(!actDates.has(dt.toISOString().split('T')[0]))dt.setDate(dt.getDate()-1);
+  let n=0;
+  while(actDates.has(dt.toISOString().split('T')[0])){n++;dt.setDate(dt.getDate()-1);}
   return n;
 }
 
@@ -676,14 +734,19 @@ function wasRoutineDoneToday(rid){
   const td=today();
   return S.workouts.some(w=>w.routineId===rid&&new Date(w.started).toISOString().split('T')[0]===td);
 }
-function getTodayRoutines(){
-  const dow=new Date().getDay();const td=today();
-  const ovRid=S.schedule.routineOverrides&&S.schedule.routineOverrides[td];
-  if(ovRid==='rest')return[];
-  if(ovRid){const r=(S.routines||[]).find(x=>x.id===ovRid&&x.active!==false);return r?[r]:[];}
-  return(S.routines||[]).filter(r=>r.active!==false&&(r.days||[]).includes(dow));
+function getActiveGroup(){return(S.groups||[]).find(g=>g.active)||null;}
+function getNextRoutine(){
+  const g=getActiveGroup();if(!g||!(g.routineIds||[]).length)return null;
+  if(g.mode==='rotation'){
+    const ids=g.routineIds;const rid=ids[(g.cursor||0)%ids.length];
+    return(S.routines||[]).find(r=>r.id===rid)||null;
+  }
+  const dow=new Date().getDay();
+  const rid=(g.routineIds||[]).find(id=>((g.dayMap||{})[id]||[]).includes(dow));
+  return rid?((S.routines||[]).find(r=>r.id===rid)||null):null;
 }
-function getTodayRoutine(){return getTodayRoutines()[0]||null;}
+function getTodayRoutines(){const r=getNextRoutine();return r?[r]:[];}
+function getTodayRoutine(){return getNextRoutine();}
 
 // ─── Workout intelligence ───
 function getExStrData(exId){
@@ -799,11 +862,7 @@ function getWeeklyActivity(nw=12){
 function getRecoveryData(){
   const ago=Date.now()-21*86400000;
   const bkts=[[Date.now()-7*86400000,Date.now()],[Date.now()-14*86400000,Date.now()-7*86400000],[Date.now()-21*86400000,Date.now()-14*86400000]];
-  const ws=bkts.map(()=>{const m={};Object.keys(MEV_MAV).forEach(k=>m[k]=0);return m;});
-  S.workouts.filter(w=>w.started>=ago).forEach(wk=>{
-    const bi=bkts.findIndex(([s,e])=>wk.started>=s&&wk.started<e);if(bi<0)return;
-    wk.exercises.forEach(ex=>{const info=getEx(ex.exId);if(!info?.muscle)return;ws[bi][info.muscle]=(ws[bi][info.muscle]||0)+ex.sets.filter(s=>s.done).length;});
-  });
+  const ws=bkts.map(([s,e])=>muscleSetsInRange(s,e));
   const warnings=[];
   Object.entries(MEV_MAV).forEach(([m,mm])=>{if(ws.filter(w=>(w[m]||0)>mm.mav).length>=2)warnings.push({muscle:mm.lbl});});
   return{ws,warnings};
@@ -900,22 +959,23 @@ function customConfirm(msg,label,cb){
   document.body.appendChild(ov);attachSwipeDown(ov);
 }
 function doConfirm(){const ov=document.getElementById('confirm-ov');if(ov)dismissOv(ov);if(_cb){_cb();_cb=null;}}
-// ─── Rest timer ───
-let rInt=null,rRem=0,rTot=0;const CIRC=176;
+// ─── Rest timer (inline pill in top bar) ───
+let rInt=null,rRem=0,rTot=0;
 function startRest(dur){
   dur=dur||S.restDur||90;if(rInt)clearInterval(rInt);rRem=dur;rTot=dur;
-  document.getElementById('rest-float').classList.add('on');updRest();
-  rInt=setInterval(()=>{rRem--;if(rRem<=0){skipRest();if(navigator.vibrate)navigator.vibrate([200,100,200]);toast('Rest done');}else updRest();},1000);
+  syncRestUI();
+  rInt=setInterval(()=>{rRem--;if(rRem<=0){skipRest();if(navigator.vibrate)navigator.vibrate([200,100,200]);toast('Rest done');}else syncRestUI();},1000);
 }
-function updRest(){
-  const t=document.getElementById('rest-time'),rc=document.getElementById('rc');
-  if(t)t.textContent=fmtTimer(rRem);
-  if(rc)rc.style.strokeDashoffset=CIRC-(((rTot-rRem)/rTot)*CIRC);
+function syncRestUI(){
+  const pill=document.getElementById('rest-pill'),t=document.getElementById('rest-pill-t');
+  if(!pill)return;
+  if(rInt&&rRem>0){pill.classList.add('on');if(t)t.textContent='REST '+fmtTimer(rRem);}
+  else pill.classList.remove('on');
 }
+function updRest(){syncRestUI();}
 function skipRest(){
-  if(rInt)clearInterval(rInt);rInt=null;
-  const rc=document.getElementById('rc');if(rc)rc.style.strokeDashoffset=CIRC;
-  document.getElementById('rest-float').classList.remove('on');
+  if(rInt)clearInterval(rInt);rInt=null;rRem=0;
+  const pill=document.getElementById('rest-pill');if(pill)pill.classList.remove('on');
 }
 let wtInt=null;
 function startWtTimer(){
@@ -1001,8 +1061,11 @@ function renderWorkout(c){
   const wkSets=wkWks.reduce((t,wk)=>t+doneSetCnt(wk),0);
   const wkVol=wkWks.reduce((t,wk)=>t+totalVol(wk),0);
   const wkCals=wkWks.reduce((t,wk)=>t+(wk.cals||0),0)+S.activities.filter(a=>new Date(a.date+'T12:00:00').getTime()>ago7).reduce((t,a)=>t+(a.cals||0),0);
-  const todayRoutines=getTodayRoutines();
-  const todayR=todayRoutines[0]||null;
+  const ag=getActiveGroup();
+  const todayR=getNextRoutine();
+  const todayRoutines=todayR?[todayR]:[];
+  const _glen=ag?Math.max(1,(ag.routineIds||[]).length):1;
+  const nextLabel=(ag&&ag.mode==='rotation')?`Up Next · ${String.fromCharCode(65+((ag.cursor||0)%_glen))}`:"Today's Workout";
 
   let html=`<div style="padding:16px 13px 12px;display:flex;align-items:flex-start;justify-content:space-between">
     <div>
@@ -1031,7 +1094,7 @@ function renderWorkout(c){
       const exNames=r.exercises.slice(0,4).map(e=>getEx(e.exId)?.name||'').filter(Boolean);
       const doneToday=wasRoutineDoneToday(r.id);
       html+=`<div class="routine-today"${todayRoutines.length>1?' style="margin-bottom:10px"':''}>
-        <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin-bottom:6px">Today's Workout</div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin-bottom:6px">${nextLabel}</div>
         <div style="font-size:22px;font-weight:700;letter-spacing:-.03em;margin-bottom:4px">${r.name}</div>
         <div style="font-size:11px;opacity:.7;margin-bottom:14px">${r.exercises.length} exercises${lastSess?` · Last done ${fmtShort(new Date(lastSess.started).toISOString())}`:''}${exNames.length?` · ${exNames.slice(0,3).join(', ')}${r.exercises.length>3?'…':''}`:''}</div>
         ${doneToday
@@ -1198,6 +1261,7 @@ function renderSession(c){
   const painWs=getPainWarnings().filter(p=>wk.exercises.some(e=>e.exId===p.exId));
   let html=`<div class="fbar">
     <div class="fbar-name">${wk.name}</div>
+    <span id="rest-pill" onclick="skipRest()"><span id="rest-pill-t"></span><span class="rp-x">✕</span></span>
     <span id="wt-el" class="wt">${fmtTimer(el)}</span>
     <button class="btn btp bsm" onclick="showFinish()">Finish</button>
   </div>
@@ -1230,11 +1294,13 @@ function renderSession(c){
         </div>
       </div>
       <div class="slbls"><div class="sl">#</div><div class="sl">Wt (${S.unit})</div><div class="sl">Reps</div><div class="sl">e1RM</div><div class="sl"></div><div class="sl"></div></div>`;
+    let wsn=0;
     ex.sets.forEach((s,si)=>{
-      const est=s.done&&parseFloat(s.w)&&parseInt(s.r)?e1rm(parseFloat(s.w),parseInt(s.r)):null;
+      const isWarm=!!s.warmup;if(!isWarm)wsn++;
+      const est=!isWarm&&s.done&&parseFloat(s.w)&&parseInt(s.r)?e1rm(parseFloat(s.w),parseInt(s.r)):null;
       const isPR=est&&pr&&est>=(pr.est||0);
-      html+=`<div class="srow${s.done?' done':''}" id="sr-${ei}-${si}">
-        <div class="snum">${si+1}</div>
+      html+=`<div class="srow${s.done?' done':''}${isWarm?' warm':''}" id="sr-${ei}-${si}">
+        <div class="snum">${isWarm?'W':wsn}</div>
         <input class="sinp" type="number" inputmode="decimal" placeholder="–" value="${s.w||''}" onchange="upd(${ei},${si},'w',this.value)"${s.done?' disabled':''}>
         <input class="sinp" type="number" inputmode="numeric" placeholder="–" value="${s.r||''}" onchange="upd(${ei},${si},'r',this.value)"${s.done?' disabled':''}>
         <div class="e1rm-cell">${est?`<div class="e1rm-badge${isPR?' pr':''}">${est}${isPR?' 🏆':''}</div>`:''}</div>
@@ -1244,6 +1310,7 @@ function renderSession(c){
       ${s._showTag?`<div class="tag-row">${['Easy','RPE 8','Hard','Form Issue','Pain'].map(t=>`<div class="tag-chip${s.tag===t?' on':''}${t==='Pain'?' pain':''}" onclick="setTag(${ei},${si},'${t}')">${t}</div>`).join('')}${s.tag?`<div class="tag-chip on" onclick="setTag(${ei},${si},'')">✕ Clear</div>`:''}</div>`:''}`;
     });
     html+=`<div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:7px;background:var(--bg)">
+      <button class="btn bts bsm" style="flex:1;color:var(--gold);font-weight:600;border-color:rgba(176,120,40,.25)" onclick="addWarmup(${ei})">+ Warmup</button>
       <button class="btn bts bsm" style="flex:1;color:var(--navy);font-weight:600;border-color:rgba(30,53,88,.2)" onclick="addSet(${ei})">+ Set</button>
       <button class="btn bts bsm delbtn" onclick="rmLastSet(${ei})">− Set</button>
     </div></div>`;
@@ -1252,9 +1319,60 @@ function renderSession(c){
     <button class="btn btp bfw" style="flex:2;padding:13px;border-radius:10px" onclick="showExPicker()">+ Add Exercise</button>
     <button class="btn bts" style="padding:13px;border-radius:10px;color:var(--red)" onclick="confirmCancel()">Cancel</button>
   </div>`;
-  c.innerHTML=html;startWtTimer();
+  c.innerHTML=html;startWtTimer();syncRestUI();
 }
-function upd(ei,si,f,v){if(!S.activeWorkout)return;S.activeWorkout.exercises[ei].sets[si][f]=v;save();}
+// ─── Proportional autofill + warmups ───
+const WARMUP_RAMP={1:[0.6],2:[0.5,0.7],3:[0.4,0.6,0.8]};
+function loadInc(eq,weight){
+  if(eq==='Dumbbell'||eq==='Machine'||eq==='Cable')return weight>=100?5:2.5;
+  return 5; // Barbell, Kettlebell, Medicine Ball, Other, added-load Bodyweight
+}
+function roundTo(raw,inc){return Math.round(raw/inc)*inc;}
+function jumpFor(weight,eq){const inc=loadInc(eq,weight);return Math.max(inc,roundTo(weight*0.025,inc));}
+function warmupPcts(n){return WARMUP_RAMP[n]||Array.from({length:n},(_,i)=>0.4+(0.45*i/(n-1||1)));}
+// Recompute every auto (non-manual, non-completed) set for one exercise.
+// Working sets ascend from the first working set; warmups ramp off it.
+function recalcExercise(ei){
+  const wk=S.activeWorkout;if(!wk)return;
+  const ex=wk.exercises[ei];if(!ex)return;
+  const eq=getEx(ex.exId)?.eq||'Other';
+  const working=ex.sets.filter(s=>!s.warmup);
+  const w0=working.length?parseFloat(working[0].w):NaN;
+  let base=isNaN(w0)?NaN:w0;
+  for(let k=1;k<working.length;k++){
+    const s=working[k];
+    if(!isNaN(base)&&!s.done&&!s._manual){
+      const asc=base+jumpFor(base,eq);
+      s.w=String(roundTo(asc,loadInc(eq,asc)));
+    }
+    const sv=parseFloat(s.w);if(!isNaN(sv))base=sv;
+  }
+  const warm=ex.sets.filter(s=>s.warmup);
+  if(warm.length&&!isNaN(w0)){
+    const pcts=warmupPcts(warm.length);
+    warm.forEach((s,i)=>{
+      if(!s.done&&!s._manual){
+        const raw=w0*pcts[i],inc=loadInc(eq,raw);
+        s.w=String(Math.max(inc,roundTo(raw,inc)));
+      }
+    });
+  }
+  save();
+}
+function syncExInputs(ei){
+  const ex=S.activeWorkout?.exercises[ei];if(!ex)return;
+  ex.sets.forEach((s,si)=>{
+    const wi=document.querySelector(`#sr-${ei}-${si} input:nth-of-type(1)`);
+    if(wi&&document.activeElement!==wi)wi.value=s.w||'';
+  });
+}
+function upd(ei,si,f,v){
+  if(!S.activeWorkout)return;
+  const s=S.activeWorkout.exercises[ei].sets[si];
+  s[f]=v;
+  if(f==='w'){s._manual=(v!==''&&v!=null);recalcExercise(ei);syncExInputs(ei);}
+  else save();
+}
 function togSet(ei,si){
   if(!S.activeWorkout)return;
   const s=S.activeWorkout.exercises[ei].sets[si];
@@ -1262,14 +1380,14 @@ function togSet(ei,si){
   const ri=document.querySelector(`#sr-${ei}-${si} input:nth-of-type(2)`);
   if(wi)s.w=wi.value;if(ri)s.r=ri.value;
   s.done=!s.done;
-  if(s.done){checkPR(S.activeWorkout.exercises[ei].exId,parseFloat(s.w||0),parseInt(s.r||0));startRest(S.restDur);}
+  if(s.done){if(!s.warmup)checkPR(S.activeWorkout.exercises[ei].exId,parseFloat(s.w||0),parseInt(s.r||0));startRest(S.restDur);}
   save();
   const row=document.getElementById(`sr-${ei}-${si}`);
   if(row){
-    row.className=`srow${s.done?' done':''}`;
+    row.className=`srow${s.done?' done':''}${s.warmup?' warm':''}`;
     row.querySelector('.chk')?.classList.toggle('done',s.done);
     row.querySelectorAll('input').forEach(inp=>inp.disabled=s.done);
-    const est=s.done&&parseFloat(s.w)&&parseInt(s.r)?e1rm(parseFloat(s.w),parseInt(s.r)):null;
+    const est=!s.warmup&&s.done&&parseFloat(s.w)&&parseInt(s.r)?e1rm(parseFloat(s.w),parseInt(s.r)):null;
     const pr=S.prs[S.activeWorkout.exercises[ei].exId];
     const isPR=est&&pr&&est>=(pr.est||0);
     const cell=row.querySelector('.e1rm-cell');
@@ -1283,7 +1401,8 @@ function togSet(ei,si){
 function toggleTagRow(ei,si){if(!S.activeWorkout)return;const s=S.activeWorkout.exercises[ei].sets[si];s._showTag=!s._showTag;renderSession(document.getElementById('content'));}
 function setTag(ei,si,tag){if(!S.activeWorkout)return;const s=S.activeWorkout.exercises[ei].sets[si];s.tag=tag;s._showTag=false;save();renderSession(document.getElementById('content'));}
 function checkPR(exId,w,r){if(!w||!r)return;const est=e1rm(w,r);const prev=S.prs[exId];if(!prev||est>e1rm(parseFloat(prev.w),parseInt(prev.r))){S.prs[exId]={w,r,est,date:today()};save();const ex=getEx(exId);toast(`🏆 PR — ${ex?.name||'Exercise'}: ${w}${S.unit}×${r}`,'gold');}}
-function addSet(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];const last=ex.sets[ex.sets.length-1];ex.sets.push({w:last?.w||'',r:last?.r||'',done:false,tag:''});save();renderSession(document.getElementById('content'));setTimeout(()=>{document.querySelectorAll(`#exb-${ei} .srow`).slice(-1)[0]?.scrollIntoView({behavior:'smooth',block:'nearest'});},60);}
+function addSet(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];const lastWork=[...ex.sets].reverse().find(s=>!s.warmup);ex.sets.push({w:'',r:lastWork?.r||'',done:false,tag:'',warmup:false,_manual:false});recalcExercise(ei);renderSession(document.getElementById('content'));setTimeout(()=>{document.querySelectorAll(`#exb-${ei} .srow`).slice(-1)[0]?.scrollIntoView({behavior:'smooth',block:'nearest'});},60);}
+function addWarmup(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];let idx=0;while(idx<ex.sets.length&&ex.sets[idx].warmup)idx++;ex.sets.splice(idx,0,{w:'',r:'',done:false,tag:'',warmup:true,_manual:false});recalcExercise(ei);renderSession(document.getElementById('content'));}
 function rmLastSet(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];if(ex.sets.length>1){ex.sets.pop();save();renderSession(document.getElementById('content'));}}
 function removeEx(ei){if(!S.activeWorkout)return;S.activeWorkout.exercises.splice(ei,1);save();renderSession(document.getElementById('content'));}
 function confirmCancel(){customConfirm('This workout will not be saved.','Discard workout',()=>{S.activeWorkout=null;if(wtInt)clearInterval(wtInt);skipRest();save();render();});}
@@ -1372,6 +1491,11 @@ function saveWorkout(){
   if(n)S.activeWorkout.name=n.value||S.activeWorkout.name;if(nt)S.activeWorkout.notes=nt.value;
   S.activeWorkout.ended=Date.now();S.activeWorkout.cals=sessionCals(S.activeWorkout.ended-S.activeWorkout.started);
   S.workouts.unshift(S.activeWorkout);S.activeWorkout=null;
+  const _ag=getActiveGroup();
+  if(_ag&&_ag.mode==='rotation'&&(_ag.routineIds||[]).length){
+    const curId=_ag.routineIds[(_ag.cursor||0)%_ag.routineIds.length];
+    if(S.workouts[0]&&S.workouts[0].routineId===curId)_ag.cursor=((_ag.cursor||0)+1)%_ag.routineIds.length;
+  }
   if(wtInt)clearInterval(wtInt);skipRest();save();
   document.getElementById('fin-ov')?.remove();toast('Workout saved!','green');render();
 }
@@ -1421,7 +1545,7 @@ function pickEx(exId){
     if(window._pickRid){addExToRoutine(window._pickRid,exId);}
     else if(S.activeWorkout){
       const fill=getAutoFill(exId,S.activeWorkout.routineId);
-      const sets=fill?fill.map(f=>({w:f.w,r:f.r,done:false,tag:''})):Array.from({length:3},()=>({w:'',r:'',done:false,tag:''}));
+      const sets=fill?fill.map(f=>({w:f.w,r:f.r,done:false,tag:'',warmup:false,_manual:false})):Array.from({length:3},()=>({w:'',r:'',done:false,tag:'',warmup:false,_manual:false}));
       S.activeWorkout.exercises.push({exId,sets,_af:!!fill});save();renderSession(document.getElementById('content'));
     }
   },230);
@@ -1648,11 +1772,38 @@ function renderStrengthBody(){
 }
 function renderStrengthChart(){const exId=S.progExId||getExsWithHist()[0];if(!exId)return;const data=getExStrData(exId);if(!data.length)return;mkChart('ch-str',{type:'line',data:{labels:data.map(d=>d.label),datasets:[{data:data.map(d=>d.e1rm),borderColor:cv('--navy'),backgroundColor:'transparent',tension:0.3,pointRadius:4,pointBackgroundColor:cv('--navy')}]},options:{...baseOpts(),plugins:{legend:{display:false}},scales:{x:{ticks:{color:cv('--muted'),font:{size:9}},grid:{display:false}},y:{ticks:{color:cv('--muted'),font:{size:10}},grid:{color:cv('--border')}}}}});}
 function renderPRsBody(){const prs=Object.entries(S.prs).sort((a,b)=>parseFloat(b[1].w)-parseFloat(a[1].w));if(!prs.length)return`<div class="empty" style="padding:24px"><div style="font-size:28px;margin-bottom:8px">🏆</div><div class="etit" style="font-size:14px">No PRs yet</div></div>`;return`<div>${prs.map(([id,pr])=>{const ex=getEx(id);return`<div class="mvrow"><div class="mvname">${ex?.name||id}</div><div class="mono" style="font-size:13px;font-weight:600;color:var(--gold)">${pr.w}<span style="font-size:10px;opacity:.6"> ${S.unit}</span></div><div style="font-size:10px;color:var(--muted);margin-left:9px">×${pr.r}</div></div>`;}).join('')}</div>`;}
+const BODYMAP_IMG="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";
+const BM_POS={
+  'Deltoids':[['f',0.28,0.22],['f',0.72,0.22],['b',0.27,0.22],['b',0.73,0.22]],
+  'Pectoralis Major':[['f',0.40,0.27],['f',0.60,0.27]],
+  'Biceps Brachii':[['f',0.21,0.31],['f',0.79,0.31]],
+  'Rectus Abdominis':[['f',0.50,0.38]],
+  'Quadriceps':[['f',0.41,0.60],['f',0.59,0.60]],
+  'Trapezius':[['b',0.50,0.19]],
+  'Latissimus Dorsi':[['b',0.38,0.30],['b',0.62,0.30]],
+  'Triceps Brachii':[['b',0.21,0.31],['b',0.79,0.31]],
+  'Gluteus Maximus':[['b',0.42,0.50],['b',0.58,0.50]],
+  'Hamstrings':[['b',0.41,0.63],['b',0.59,0.63]],
+  'Gastrocnemius/Soleus':[['b',0.42,0.80],['b',0.58,0.80]],
+};
+function renderBodyMap(sbm){
+  const st=m=>{const mm=MEV_MAV[m];if(!mm)return'none';const s=sbm[m]||0;return s===0?'none':s<mm.mev?'low':s<=mm.mav?'ok':'high';};
+  const C={low:'#b03535',ok:'#27724a',high:'#7248bc'};
+  let blobs='';
+  Object.entries(BM_POS).forEach(([m,pts])=>{const s=st(m);if(s==='none')return;const col=C[s];pts.forEach(([fig,lx,ly])=>{const gx=fig==='f'?lx*0.411:0.503+lx*0.497;blobs+=`<div class="bm-blob" style="left:${(gx*100).toFixed(1)}%;top:${(ly*100).toFixed(1)}%;background:${col}"></div>`;});});
+  return`<div style="padding:8px 10px 2px"><div style="position:relative;width:100%;max-width:360px;margin:0 auto">
+    <img src="data:image/png;base64,${BODYMAP_IMG}" style="width:100%;display:block" alt="muscle map"/>${blobs}
+  </div>
+  <div style="display:flex;justify-content:center;gap:14px;margin-top:7px;font-size:9px;color:var(--muted);font-weight:600">
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#b03535;vertical-align:middle;margin-right:3px"></span>Under</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#27724a;vertical-align:middle;margin-right:3px"></span>On target</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7248bc;vertical-align:middle;margin-right:3px"></span>Over</span>
+  </div></div>`;
+}
 function renderVolumeBody(){
-  const ago7=Date.now()-7*86400000;const sbm={};
-  S.workouts.filter(w=>w.started>=ago7).forEach(wk=>wk.exercises.forEach(ex=>{const info=getEx(ex.exId);if(!info?.muscle)return;sbm[info.muscle]=(sbm[info.muscle]||0)+ex.sets.filter(s=>s.done).length;}));
+  const ago7=Date.now()-7*86400000;const sbm=muscleSetsInRange(ago7,Date.now()+1);
   const muscles=Object.entries(MEV_MAV);
-  let html=`<div style="padding:8px 13px 5px;font-size:10px;color:var(--muted2);font-weight:500;letter-spacing:.04em;text-transform:uppercase">This week · target: MEV–MAV sets</div>`;
+  let html=renderBodyMap(sbm)+`<div style="padding:8px 13px 5px;font-size:10px;color:var(--muted2);font-weight:500;letter-spacing:.04em;text-transform:uppercase">This week · target: MEV–MAV sets</div>`;
   html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border)">`;
   muscles.forEach(([m,mm])=>{
     const s=sbm[m]||0;
@@ -1663,7 +1814,7 @@ function renderVolumeBody(){
     const pct=Math.min(100,Math.round((s/mm.mav)*100));
     html+=`<div style="background:${bg};padding:10px 8px;text-align:center">
       <div style="font-size:8px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">${mm.lbl}</div>
-      <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:${col};line-height:1.1">${s}</div>
+      <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:${col};line-height:1.1">${fmtSets(s)}</div>
       <div style="font-size:8px;color:${col};margin-top:2px;font-weight:600">${lbl}</div>
       <div style="height:3px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${col};border-radius:2px"></div></div>
     </div>`;
@@ -1683,7 +1834,7 @@ function renderRecoveryBody(){
     <div style="display:flex;align-items:center;justify-content:space-between;padding:13px">
       <div><div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Accumulated Fatigue</div>
       <div style="font-size:26px;font-weight:700;color:${fcol};letter-spacing:-.5px">${fatigue}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:3px">${tot0} sets this week · ${tot1} last week</div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">${fmtSets(tot0)} sets this week · ${fmtSets(tot1)} last week</div></div>
       <div style="font-size:32px">${femoji}</div>
     </div>
     ${warnings.length?`<div style="padding:0 13px 12px;font-size:12px;color:var(--gold);font-weight:600">💡 Deload: ${warnings.map(w=>w.muscle).join(', ')}</div>`:''}
@@ -1701,10 +1852,10 @@ function renderRecoveryBody(){
     const trend=w0>w1?'↑':w0<w1?'↓':'→';const tc=w0>w1?'var(--red)':w0<w1?'var(--green)':'var(--muted2)';
     html+=`<div style="display:grid;grid-template-columns:1fr 52px 52px 58px;padding:7px 0;border-bottom:1px solid var(--border);align-items:center">
       <div style="font-size:12px;font-weight:500">${mm.lbl}</div>
-      <div style="text-align:center;font-size:11px;color:var(--muted2);font-family:'IBM Plex Mono',monospace">${w2||'–'}</div>
-      <div style="text-align:center;font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">${w1||'–'}</div>
+      <div style="text-align:center;font-size:11px;color:var(--muted2);font-family:'IBM Plex Mono',monospace">${w2?fmtSets(w2):'–'}</div>
+      <div style="text-align:center;font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">${w1?fmtSets(w1):'–'}</div>
       <div style="text-align:center;display:flex;align-items:center;justify-content:center;gap:3px">
-        <span style="font-size:13px;font-weight:700;color:${col};font-family:'IBM Plex Mono',monospace">${w0||'–'}</span>
+        <span style="font-size:13px;font-weight:700;color:${col};font-family:'IBM Plex Mono',monospace">${w0?fmtSets(w0):'–'}</span>
         ${w0>0?`<span style="font-size:10px;color:${tc}">${trend}</span>`:''}
       </div>
     </div>`;
@@ -2043,10 +2194,12 @@ function renderLibrary(c){
   <div class="ptabs">
     <button class="ptab${S.libTab==='exercises'?' on':''}" onclick="setLibTab('exercises')">Exercises</button>
     <button class="ptab${S.libTab==='routines'?' on':''}" onclick="setLibTab('routines')">Routines</button>
+    <button class="ptab${S.libTab==='groups'?' on':''}" onclick="setLibTab('groups')">Groups</button>
     <button class="ptab${S.libTab==='equipment'?' on':''}" onclick="setLibTab('equipment')">Equipment</button>
   </div>`;
   if(S.libTab==='exercises')html+=renderLibExercises();
   else if(S.libTab==='routines')html+=renderLibRoutines();
+  else if(S.libTab==='groups')html+=renderLibGroups();
   else html+=renderLibEquipment();
   c.innerHTML=html;
 }
@@ -2115,13 +2268,11 @@ function renderLibRoutines(){
   const renderRow=r=>{
     const last=S.workouts.find(w=>w.routineId===r.id);
     const names=r.exercises.slice(0,3).map(e=>getEx(e.exId)?.name||'').filter(Boolean);
-    const days=(r.days||[]).map(d=>DOW[d]).join(', ');
     const isInactive=r.active===false;
     return`<div class="hi" onclick="showRoutineDetail('${r.id}')" style="${isInactive?'opacity:.5':''}">
       <div style="flex:1">
         <div class="hn">${r.name}${isInactive?` <span style="font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--bg2);border-radius:3px;padding:1px 5px;margin-left:4px">Inactive</span>`:''}</div>
         <div class="hm">${r.exercises.length} exercises · ${last?'Last: '+fmtShort(new Date(last.started).toISOString()):'Never done'}</div>
-        ${days?`<div style="font-size:10px;color:var(--navy);font-weight:600;margin-top:2px">${days}</div>`:''}
         ${names.length?`<div style="font-size:10px;color:var(--muted2);margin-top:1px">${names.join(' · ')}${r.exercises.length>3?'…':''}</div>`:''}
       </div><span style="color:var(--muted2);font-size:16px">›</span>
     </div>`;
@@ -2136,6 +2287,179 @@ function renderLibRoutines(){
   }
   return html;
 }
+// ─── Routine Groups ───
+function renderLibGroups(){
+  let html=`<div style="padding:9px 13px;display:flex;justify-content:flex-end"><button class="btn btp bsm" onclick="showCreateGroup()">+ New Group</button></div>`;
+  if(!S.groups?.length)return html+`<div class="empty"><div style="font-size:36px;margin-bottom:10px">🗂️</div><div class="etit">No groups yet</div><p style="font-size:12px">Group routines into a rotating split (A/B/C) or a weekly day-picker schedule</p></div>`;
+  html+=`<div class="card">`;
+  S.groups.forEach(g=>{
+    const cnt=(g.routineIds||[]).length;const modeLbl=g.mode==='rotation'?'Rotating':'Day Picker';
+    html+=`<div class="hi" onclick="showGroupDetail('${g.id}')"><div style="flex:1"><div class="hn">${g.name}${g.active?` <span class="badge bg" style="margin-left:4px">Active</span>`:''}</div><div class="hm">${modeLbl} · ${cnt} routine${cnt!==1?'s':''}</div></div><span style="color:var(--muted2);font-size:16px">›</span></div>`;
+  });
+  html+=`</div>`;
+  if(!getActiveGroup())html+=`<div style="padding:10px 14px;font-size:11px;color:var(--muted)">No active group — your home screen won't suggest a workout. Open a group and tap "Set Active".</div>`;
+  return html;
+}
+function setCgMode(m){window._cgMode=m;['rotation','daypicker'].forEach(x=>{const b=document.getElementById('cg-m-'+x);if(b){b.classList.toggle('btp',x===m);b.classList.toggle('bts',x!==m);}});}
+function showCreateGroup(){
+  const id=uid();const ov=makeOv('cg-ov');
+  ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">New Group</div>
+    <div class="fg"><label class="fl">Name</label><input type="text" id="cg-name" placeholder="e.g. Push / Pull / Legs"></div>
+    <div class="fg"><label class="fl">Schedule Type</label>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btp bfw" id="cg-m-rotation" onclick="setCgMode('rotation')">Rotating A/B/C</button>
+        <button class="btn bts bfw" id="cg-m-daypicker" onclick="setCgMode('daypicker')">Day Picker</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Rotating advances A→B→C each time you finish a workout. Day Picker assigns each routine to weekdays.</div>
+    </div>
+    <button class="btn btp bfw" onclick="createGroup('${id}')">Create Group</button>
+    <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('cg-ov'))">Cancel</button>
+  </div>`;
+  window._cgMode='rotation';document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function createGroup(id){
+  const name=document.getElementById('cg-name')?.value?.trim();if(!name){toast('Enter a name');return;}
+  if(!S.groups)S.groups=[];
+  S.groups.push({id,name,mode:window._cgMode||'rotation',routineIds:[],cursor:0,dayMap:{},daysPerWeek:inferDaysPerWeek(),active:S.groups.length===0});
+  save();dismissOv(document.getElementById('cg-ov'));toast('Group created','green');S.libTab='groups';showGroupDetail(id);
+}
+function showGroupDetail(gid){
+  const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const DOW=['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const dpw=g.daysPerWeek||inferDaysPerWeek(),rest=7-dpw;
+  const inGroup=(g.routineIds||[]).map(id=>(S.routines||[]).find(r=>r.id===id)).filter(Boolean);
+  const ov=makeOv('gd-ov');
+  let exHtml='';
+  inGroup.forEach((r,i)=>{
+    const letter=String.fromCharCode(65+i);
+    const isNext=g.mode==='rotation'&&((g.cursor||0)%Math.max(1,inGroup.length))===i;
+    exHtml+=`<div class="exi" style="${isNext?'background:var(--ndim)':''}">
+      <div style="flex:1">
+        <div class="exin">${g.mode==='rotation'?`<span style="color:var(--navy);font-weight:700">${letter}</span> · `:''}${r.name}${isNext?` <span class="badge bg" style="margin-left:4px">Next</span>`:''}</div>
+        ${g.mode==='daypicker'?`<div style="display:flex;gap:3px;margin-top:6px">${DOW.map((d,di)=>`<button class="sched-day${((g.dayMap||{})[r.id]||[]).includes(di)?' on':''}" style="width:30px;height:27px;font-size:10px" onclick="event.stopPropagation();toggleGroupDay('${gid}','${r.id}',${di})">${d}</button>`).join('')}</div>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;margin-left:6px">
+        ${g.mode==='rotation'?`${!isNext?`<button class="ib" style="color:var(--navy)" onclick="event.stopPropagation();setGroupCursor('${gid}',${i})" title="Set as next">⟳</button>`:''}<button class="ib" onclick="event.stopPropagation();moveInGroup('${gid}',${i},-1)">↑</button><button class="ib" onclick="event.stopPropagation();moveInGroup('${gid}',${i},1)">↓</button>`:''}
+        <button class="ib delbtn" onclick="event.stopPropagation();removeFromGroup('${gid}','${r.id}')">✕</button>
+      </div>
+    </div>`;
+  });
+  ov.innerHTML=`<div class="modal"><div class="mh"></div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+      <div class="mt">${g.name}</div>
+      <button class="btn ${g.active?'btok':'btp'} bsm" onclick="setActiveGroup('${gid}')">${g.active?'✓ Active':'Set Active'}</button>
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:4px">
+      <button class="btn ${g.mode==='rotation'?'btp':'bts'} bfw bsm" onclick="setGroupMode('${gid}','rotation')">Rotating A/B/C</button>
+      <button class="btn ${g.mode==='daypicker'?'btp':'bts'} bfw bsm" onclick="setGroupMode('${gid}','daypicker')">Day Picker</button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:12px">${g.mode==='rotation'?'Advances A→B→C each time you finish a workout.':'Each routine runs on the weekdays you assign below.'}</div>
+    <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:12px">${exHtml||'<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">No routines yet</div></div>'}</div>
+    <button class="btn bts bfw" style="margin-bottom:9px" onclick="showAddRoutineToGroup('${gid}')">+ Add Routine</button>
+    ${g.mode==='rotation'&&(g.routineIds||[]).length?`<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:9px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600">Training days / week</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="ib" onclick="setGroupDays('${gid}',${dpw-1})">−</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;min-width:16px;text-align:center">${dpw}</span>
+          <button class="ib" onclick="setGroupDays('${gid}',${dpw+1})">+</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:12px;font-weight:600;color:var(--muted)">Rest days / week</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="ib" onclick="setGroupDays('${gid}',${7-(rest-1)})">−</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;min-width:16px;text-align:center;color:var(--muted)">${rest}</span>
+          <button class="ib" onclick="setGroupDays('${gid}',${7-(rest+1)})">+</button>
+        </div>
+      </div>
+    </div>`:''}
+    ${(g.routineIds||[]).length?`<button class="btn btp bfw" style="margin-bottom:9px" onclick="showGroupEval('${gid}')">📊  Evaluate Program</button>`:''}
+    <button class="btn btd bfw" onclick="deleteGroup('${gid}')">Delete Group</button>
+    <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('gd-ov'))">Close</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function reopenGroup(gid){document.getElementById('gd-ov')?.remove();showGroupDetail(gid);}
+function setGroupMode(gid,mode){const g=(S.groups||[]).find(x=>x.id===gid);if(!g||g.mode===mode)return;g.mode=mode;if(mode==='rotation'&&(g.cursor||0)>=(g.routineIds||[]).length)g.cursor=0;if(!g.dayMap)g.dayMap={};save();reopenGroup(gid);}
+function setGroupDays(gid,d){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;g.daysPerWeek=Math.min(7,Math.max(1,d));save();reopenGroup(gid);}
+function showGroupEval(gid){
+  const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const{proj,sessions,nRoutines}=groupProjection(g);
+  const scale=goalVolScale();
+  const actual=muscleSetsInRange(Date.now()-14*86400000,Date.now()+1);
+  const goalLbl=(GOALS.find(x=>x.id===S.goal)||{}).label||'General';
+  const gaps=[],over=[],drift=[];
+  const rows=Object.entries(MEV_MAV).map(([m,mm])=>{
+    const mev2=Math.round(mm.mev*2*scale),mav2=Math.round(mm.mav*2*scale);
+    const p=proj[m]||0,a=actual[m]||0;
+    let status,col,bg;
+    if(p<mev2){status="Won't hit MEV";col='var(--red)';bg='var(--rdim)';gaps.push(mm.lbl);}
+    else if(p<=mav2){status='On target';col='var(--green)';bg='var(--grdim)';}
+    else{status='Over MAV';col='var(--purple)';bg='var(--pdim)';over.push(mm.lbl);}
+    // drift: planned to hit MEV but logged volume is running well short (<60% of plan)
+    if(p>=mev2&&a<p*0.6)drift.push(mm.lbl);
+    return{m,mm,mev2,mav2,p,a,status,col,bg};
+  });
+  const noData=sessions===0;
+  const ov=makeOv('ge-ov');
+  let head=`<div style="margin-bottom:12px">
+    <div class="mt" style="margin-bottom:3px">${g.name}</div>
+    <div style="font-size:11px;color:var(--muted)">${g.mode==='rotation'?'Rotating':'Day Picker'} · ${nRoutines} routine${nRoutines!==1?'s':''} · ~${sessions} sessions / 2 wks · Goal: ${goalLbl}</div>
+  </div>`;
+  if(noData){
+    ov.innerHTML=`<div class="modal"><div class="mh"></div>${head}
+      <div class="empty" style="padding:24px"><div style="font-size:30px;margin-bottom:8px">🗓️</div><div class="etit" style="font-size:14px">No cadence yet</div><p style="font-size:12px">${g.mode==='daypicker'?'Assign routines to weekdays so I can project weekly coverage.':'Set training days/week and add routines to project coverage.'}</p></div>
+      <button class="btn btg bfw" style="margin-top:9px" onclick="dismissOv(document.getElementById('ge-ov'))">Close</button></div>`;
+    document.body.appendChild(ov);attachSwipeDown(ov);return;
+  }
+  // summary verdict
+  let summary='';
+  if(gaps.length)summary+=`<div style="background:var(--rdim);border:1px solid rgba(193,49,49,.2);border-radius:10px;padding:11px 13px;margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Under-trained — focus here</div><div style="font-size:13px;font-weight:600">${gaps.join(' · ')}</div><div style="font-size:11px;color:var(--muted);margin-top:3px">Below the minimum effective volume for your goal. Add work or frequency for these.</div></div>`;
+  if(over.length)summary+=`<div style="background:var(--pdim);border:1px solid rgba(124,58,193,.2);border-radius:10px;padding:11px 13px;margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Above max adaptive volume</div><div style="font-size:13px;font-weight:600">${over.join(' · ')}</div><div style="font-size:11px;color:var(--muted);margin-top:3px">More may not help and can outpace recovery. Consider trimming.</div></div>`;
+  if(drift.length)summary+=`<div style="background:var(--grdim);border:1px solid rgba(176,120,40,.2);border-radius:10px;padding:11px 13px;margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Plan vs reality</div><div style="font-size:13px;font-weight:600">${drift.join(' · ')}</div><div style="font-size:11px;color:var(--muted);margin-top:3px">Your plan covers these but your logged volume is running short — you may be skipping them.</div></div>`;
+  if(!gaps.length&&!over.length)summary+=`<div style="background:var(--grdim);border:1px solid rgba(39,114,74,.2);border-radius:10px;padding:11px 13px;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--green)">✓ Balanced — every muscle group is projected within its target range.</div>`;
+  // table
+  let table=`<div style="display:grid;grid-template-columns:1fr 64px 56px 56px;padding:7px 4px;border-bottom:2px solid var(--border)">
+    <div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">Muscle</div>
+    <div style="font-size:9px;font-weight:700;color:var(--muted2);text-align:center;text-transform:uppercase">Target/2wk</div>
+    <div style="font-size:9px;font-weight:700;color:var(--navy);text-align:center;text-transform:uppercase">Plan</div>
+    <div style="font-size:9px;font-weight:700;color:var(--muted2);text-align:center;text-transform:uppercase">Logged</div>
+  </div>`;
+  rows.forEach(r=>{
+    table+=`<div style="display:grid;grid-template-columns:1fr 64px 56px 56px;padding:8px 4px;border-bottom:1px solid var(--border);align-items:center;background:${r.bg}">
+      <div><div style="font-size:12px;font-weight:600">${r.mm.lbl}</div><div style="font-size:9px;color:${r.col};font-weight:600">${r.status}</div></div>
+      <div style="text-align:center;font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">${r.mev2}–${r.mav2}</div>
+      <div style="text-align:center;font-size:14px;font-weight:700;color:${r.col};font-family:'IBM Plex Mono',monospace">${fmtSets(r.p)}</div>
+      <div style="text-align:center;font-size:12px;color:var(--muted2);font-family:'IBM Plex Mono',monospace">${r.a?fmtSets(r.a):'–'}</div>
+    </div>`;
+  });
+  ov.innerHTML=`<div class="modal" style="max-height:88vh;overflow-y:auto"><div class="mh"></div>${head}${summary}
+    <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 4px;font-weight:600">Per-muscle · 2-week projection</div>
+    ${table}
+    <div style="font-size:10px;color:var(--muted2);margin-top:8px;line-height:1.5">Plan = projected weighted sets if you run this program over 2 weeks. Logged = what you've actually trained in the last 2 weeks. Targets are MEV–MAV scaled for your goal (compound lifts credit assisting muscles at half a set).</div>
+    <button class="btn btg bfw" style="margin-top:11px" onclick="dismissOv(document.getElementById('ge-ov'))">Close</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function setActiveGroup(gid){(S.groups||[]).forEach(g=>g.active=(g.id===gid)?!g.active:false);save();reopenGroup(gid);toast('Active group updated','green');}
+function showAddRoutineToGroup(gid){
+  const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const avail=(S.routines||[]).filter(r=>!(g.routineIds||[]).includes(r.id));
+  const ov=makeOv('agr-ov');
+  ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">Add Routine</div>
+    ${avail.length?`<div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden">${avail.map(r=>`<div class="exi" onclick="addToGroup('${gid}','${r.id}')"><div style="flex:1"><div class="exin">${r.name}</div><div style="font-size:10px;color:var(--muted);margin-top:1px">${r.exercises.length} exercises</div></div><span style="color:var(--navy);font-size:18px;font-weight:600">+</span></div>`).join('')}</div>`:`<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">All routines already added</div><p style="font-size:11px">Create more in the Routines tab</p></div>`}
+    <button class="btn btg bfw" style="margin-top:9px" onclick="dismissOv(document.getElementById('agr-ov'))">Cancel</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function addToGroup(gid,rid){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;if(!g.routineIds)g.routineIds=[];if(!g.routineIds.includes(rid))g.routineIds.push(rid);save();dismissOv(document.getElementById('agr-ov'));reopenGroup(gid);}
+function removeFromGroup(gid,rid){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;g.routineIds=(g.routineIds||[]).filter(id=>id!==rid);if(g.dayMap)delete g.dayMap[rid];if((g.cursor||0)>=g.routineIds.length)g.cursor=0;save();reopenGroup(gid);}
+function moveInGroup(gid,i,dir){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;const ids=g.routineIds;const j=i+dir;if(j<0||j>=ids.length)return;[ids[i],ids[j]]=[ids[j],ids[i]];save();reopenGroup(gid);}
+function setGroupCursor(gid,i){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;g.cursor=i;save();reopenGroup(gid);toast('Next workout set','green');}
+function toggleGroupDay(gid,rid,dow){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;if(!g.dayMap)g.dayMap={};if(!g.dayMap[rid])g.dayMap[rid]=[];const arr=g.dayMap[rid];const idx=arr.indexOf(dow);if(idx>=0)arr.splice(idx,1);else arr.push(dow);save();reopenGroup(gid);}
+function deleteGroup(gid){customConfirm('Delete this group? Your routines are kept.','Delete',()=>{S.groups=(S.groups||[]).filter(g=>g.id!==gid);save();document.getElementById('gd-ov')?.remove();S.libTab='groups';renderLibrary(document.getElementById('content'));});}
+
 function renderLibEquipment(){
   const cur=S.equipPreset||'full';
   let html=`<div style="padding:10px 13px 4px"><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Select what's available at your gym to filter exercises throughout the app.</div>
@@ -2156,11 +2480,6 @@ function showCreateRoutine(){
   ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">New Routine</div>
     <div class="fg"><label class="fl">Name</label><input type="text" id="rn-name" placeholder="e.g. Push Day A"></div>
     <div class="fg"><label class="fl">Notes</label><textarea id="rn-notes" style="min-height:55px;font-size:13px" placeholder="Cues, goals, focus areas…"></textarea></div>
-    <div class="fg"><label class="fl">Schedule Days</label>
-      <div style="display:flex;gap:5px;justify-content:space-between;margin-top:4px">
-        ${['Su','Mo','Tu','We','Th','Fr','Sa'].map((d,i)=>`<button class="sched-day" id="rd-${i}" onclick="togRDay(${i})">${d}</button>`).join('')}
-      </div>
-    </div>
     <div class="sec-lbl" style="padding:4px 0 6px">Exercises <span id="r-exs-count" style="color:var(--navy)">0</span></div>
     <div id="r-exs-${id}" style="margin-bottom:10px"></div>
     <button class="btn bts bfw" style="margin-bottom:10px" onclick="showExPicker('${id}')">+ Add Exercise</button>
@@ -2176,6 +2495,17 @@ function togRDay(i){
   document.querySelectorAll(`[id^="rd-"]`).forEach(b=>{const di=parseInt(b.id.split('-')[1]);if(!isNaN(di))b.classList.toggle('on',days.includes(di));});
 }
 function addExToRoutine(rid,exId){
+  // Existing saved routine (opened via detail view): persist + re-render so it shows.
+  const saved=(S.routines||[]).find(r=>r.id===rid);
+  if(saved){
+    if(!saved.exercises)saved.exercises=[];
+    saved.exercises.push({exId,sets:3,w:'',r:''});
+    save();
+    document.getElementById('rd-ov')?.remove();
+    showRoutineDetail(rid);
+    return;
+  }
+  // New routine being built (draft): update the create modal's list inline.
   if(!window._rDraft||window._rDraft.id!==rid)window._rDraft={id:rid,exercises:[],days:[]};
   window._rDraft.exercises.push({exId,sets:3,w:'',r:''});
   const cnt=document.getElementById('r-exs-count');if(cnt)cnt.textContent=window._rDraft.exercises.length;
@@ -2207,17 +2537,11 @@ function showRoutineDetail(rid){
   ov.innerHTML=`<div class="modal"><div class="mh"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div class="mt" style="margin-bottom:4px">${r.name}</div>
-        ${(r.days||[]).length?`<div style="font-size:11px;color:var(--navy);font-weight:600">${r.days.map(d=>DOW[d]).join(', ')}</div>`:''}
         ${r.notes?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${r.notes}</div>`:''}
       </div>
       <button class="btn btp bsm" onclick="startWorkout('${rid}');dismissOv(document.getElementById('rd-ov'))">▶ Start</button>
     </div>
     ${last?`<div style="background:var(--grdim);border:1px solid rgba(45,122,82,.15);border-radius:9px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--green);font-weight:600">Last session: ${fmtDate(new Date(last.started).toISOString())} · ${doneSetCnt(last)} sets</div>`:''}
-    <div class="fg"><label class="fl">Schedule Days</label>
-      <div style="display:flex;gap:5px;justify-content:space-between;margin-top:4px">
-        ${DOW.map((d,i)=>`<button class="sched-day${(r.days||[]).includes(i)?' on':''}" id="rdx-${rid}-${i}" onclick="togRoutineDay('${rid}',${i})">${d.slice(0,2)}</button>`).join('')}
-      </div>
-    </div>
     <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:12px">${exHtml||'<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">No exercises</div></div>'}</div>
     <button class="btn bts bfw" style="margin-bottom:9px" onclick="showExPicker('${rid}')">+ Add Exercise</button>
     <button class="btn ${r.active===false?'btok':'bts'} bfw" style="margin-bottom:9px" onclick="toggleRoutineActive('${rid}')">${r.active===false?'Activate Routine':'Deactivate Routine'}</button>
@@ -2273,17 +2597,6 @@ function showSettings(){
       </div>
       <div id="sched-body">${renderSchedBody(sch)}</div>
     </div>
-
-    ${S.routines?.length?`<div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:12px">
-      <label class="fl" style="margin-bottom:10px">Routine Days</label>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Assign each routine to specific days of the week. Lah We shows today's routine at the top of the home screen.</div>
-      ${S.routines.map(r=>{const days=(r.days||[]);return`<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">${r.name}</div>
-        <div style="display:flex;gap:5px">
-          ${DOW.map((d,i)=>`<button class="sched-day${days.includes(i)?' on':''}" id="rs-${r.id}-${i}" onclick="togRoutineDay('${r.id}',${i})">${d}</button>`).join('')}
-        </div>
-      </div>`;}).join('')}
-    </div>`:''}
 
     <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
       <label class="fl">App</label>
@@ -2657,34 +2970,40 @@ function showSprintSetup(){
   </div>`;
   document.body.appendChild(ov);attachSwipeDown(ov);
 }
-function playSprintBeep(type){
+// One shared AudioContext for the whole app — creating a new one per beep
+// leaks contexts (browsers cap ~6) and the cold-start glitches/pops.
+let _audioCtx=null;
+function getAudioCtx(){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    if(type==='sprint'){
-      // Two short high beeps
-      [0,0.22].forEach(offset=>{
-        const o=ctx.createOscillator(),g=ctx.createGain();
-        o.connect(g);g.connect(ctx.destination);
-        o.frequency.value=880;o.type='sine';
-        g.gain.setValueAtTime(0.45,ctx.currentTime+offset);
-        g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+offset+0.18);
-        o.start(ctx.currentTime+offset);o.stop(ctx.currentTime+offset+0.18);
-      });
-    }else{
-      // One longer lower beep
-      const o=ctx.createOscillator(),g=ctx.createGain();
-      o.connect(g);g.connect(ctx.destination);
-      o.frequency.value=392;o.type='sine';
-      g.gain.setValueAtTime(0.38,ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.55);
-      o.start(ctx.currentTime);o.stop(ctx.currentTime+0.55);
-    }
-  }catch(e){}
+    if(!_audioCtx)_audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    if(_audioCtx.state==='suspended')_audioCtx.resume();
+    return _audioCtx;
+  }catch(e){return null;}
+}
+// A single tone with a fast attack ramp + smooth decay. Starting the gain at
+// full volume the instant the oscillator fires is what produced the click —
+// ramping 0→peak over ~12ms removes it.
+function _tone(freq,startOffset,dur,peak){
+  const ctx=_audioCtx;if(!ctx)return;
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type='sine';o.frequency.value=freq;
+  o.connect(g);g.connect(ctx.destination);
+  const t=ctx.currentTime+startOffset;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(peak,t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.start(t);o.stop(t+dur+0.03);
+}
+function playSprintBeep(type){
+  const ctx=getAudioCtx();if(!ctx)return;
+  if(type==='sprint'){_tone(880,0,0.16,0.4);_tone(880,0.22,0.16,0.4);}
+  else{_tone(392,0,0.5,0.34);}
 }
 function startSprintTimer(){
   const sprintDur=Math.max(5,parseInt(document.getElementById('sp-sprint')?.value)||60);
   const walkDur=Math.max(5,parseInt(document.getElementById('sp-walk')?.value)||120);
   S.activeSprintTimer={sprintDur,walkDur,startTime:Date.now(),rounds:0,isSprintPhase:true,phaseStart:Date.now()};
+  getAudioCtx(); // unlock audio within the user gesture so iOS will play cues
   save();dismissOv(document.getElementById('sprint-setup-ov'));
   setTimeout(()=>{render();startSprintLoop();playSprintBeep('sprint');},250);
 }
