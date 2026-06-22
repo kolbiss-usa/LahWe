@@ -824,6 +824,11 @@ function load(){
   if(!S.schedule.routineOverrides)S.schedule.routineOverrides={};
   if(!S.meals)S.meals=[];
   if(!S.foodCache)S.foodCache={};
+  if(!S.customFoods)S.customFoods=[];
+  if(!S.savedMeals)S.savedMeals=[];
+  if(!S.starredFoods)S.starredFoods=[];
+  if(!S.recentFoods)S.recentFoods=[];
+  if(!S.recentSavedMeals)S.recentSavedMeals=[];
   if(S.activeCardDeck===undefined)S.activeCardDeck=null;
   if(S.activeSprintTimer===undefined)S.activeSprintTimer=null;
   if(S.calYear==null)S.calYear=new Date().getFullYear();
@@ -2517,6 +2522,70 @@ function renderRuckingChart(){const acts=S.activities.filter(a=>['ruck','run','h
 function showRetroSteps(){const ov=makeOv('steps-ov');const cur=S.stepsLog[today()]||0;ov.innerHTML=`<div class="modal" style="max-height:250px"><div class="mh"></div><div class="mt">Log Steps</div><div class="fg"><label class="fl">Steps Today</label><input type="number" inputmode="numeric" id="step-inp" value="${cur||''}" placeholder="e.g. 8000"></div><button class="btn btp bfw" onclick="saveSteps()">Save</button><button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('steps-ov'))">Cancel</button></div>`;document.body.appendChild(ov);attachSwipeDown(ov);}
 function saveSteps(){const v=parseInt(document.getElementById('step-inp')?.value);if(!isNaN(v)){S.stepsLog[today()]=v;save();dismissOv(document.getElementById('steps-ov'));render();}}
 // ═══════════════════════════════════════════════════
+// FOOD DATABASE
+// ═══════════════════════════════════════════════════
+const QUICK_FOODS=[
+  {id:'qf_egg',name:'Egg (large)',serving:'1 egg',protein:6,carbs:0.6,fat:5,cals:72},
+  {id:'qf_egg_white',name:'Egg White',serving:'1 white',protein:3.6,carbs:0.2,fat:0,cals:17},
+  {id:'qf_chicken_breast',name:'Chicken Breast',serving:'4 oz',protein:26,carbs:0,fat:3,cals:130},
+  {id:'qf_ground_beef',name:'Ground Beef (90/10)',serving:'4 oz',protein:22,carbs:0,fat:10,cals:184},
+  {id:'qf_ground_turkey',name:'Ground Turkey (93/7)',serving:'4 oz',protein:22,carbs:0,fat:8,cals:160},
+  {id:'qf_salmon',name:'Salmon',serving:'4 oz',protein:23,carbs:0,fat:7,cals:160},
+  {id:'qf_tuna',name:'Tuna (canned)',serving:'1 can (5oz)',protein:30,carbs:0,fat:1,cals:130},
+  {id:'qf_shrimp',name:'Shrimp',serving:'4 oz',protein:23,carbs:0,fat:1,cals:100},
+  {id:'qf_greek_yogurt',name:'Greek Yogurt (plain)',serving:'1 cup',protein:20,carbs:7,fat:0,cals:110},
+  {id:'qf_cottage_cheese',name:'Cottage Cheese',serving:'1 cup',protein:24,carbs:7,fat:5,cals:183},
+  {id:'qf_whey',name:'Whey Protein Scoop',serving:'1 scoop',protein:24,carbs:3,fat:1.5,cals:120},
+  {id:'qf_milk_whole',name:'Milk (whole)',serving:'1 cup',protein:8,carbs:12,fat:8,cals:150},
+  {id:'qf_milk_2',name:'Milk (2%)',serving:'1 cup',protein:8,carbs:12,fat:5,cals:125},
+  {id:'qf_white_rice',name:'White Rice (cooked)',serving:'1 cup',protein:4,carbs:45,fat:0.4,cals:206},
+  {id:'qf_brown_rice',name:'Brown Rice (cooked)',serving:'1 cup',protein:5,carbs:45,fat:1.8,cals:216},
+  {id:'qf_oatmeal',name:'Oatmeal',serving:'½ cup dry',protein:5,carbs:27,fat:3,cals:150},
+  {id:'qf_bread_white',name:'Bread (white)',serving:'1 slice',protein:2.7,carbs:13,fat:1,cals:67},
+  {id:'qf_bread_wheat',name:'Bread (wheat)',serving:'1 slice',protein:4,carbs:12,fat:1,cals:70},
+  {id:'qf_banana',name:'Banana',serving:'1 medium',protein:1.3,carbs:27,fat:0.4,cals:105},
+  {id:'qf_apple',name:'Apple',serving:'1 medium',protein:0.5,carbs:25,fat:0.3,cals:95},
+  {id:'qf_sweet_potato',name:'Sweet Potato',serving:'1 medium',protein:2,carbs:26,fat:0,cals:103},
+  {id:'qf_avocado',name:'Avocado',serving:'½ fruit',protein:1.5,carbs:6,fat:11,cals:120},
+  {id:'qf_peanut_butter',name:'Peanut Butter',serving:'2 tbsp',protein:7,carbs:6,fat:16,cals:190},
+  {id:'qf_almonds',name:'Almonds',serving:'1 oz',protein:6,carbs:6,fat:14,cals:164},
+  {id:'qf_olive_oil',name:'Olive Oil',serving:'1 tbsp',protein:0,carbs:0,fat:14,cals:120},
+  {id:'qf_cheese',name:'Cheddar Cheese',serving:'1 oz',protein:7,carbs:0.4,fat:9,cals:113},
+  {id:'qf_protein_bar',name:'Protein Bar',serving:'1 bar',protein:20,carbs:25,fat:8,cals:250},
+  {id:'qf_tortilla',name:'Flour Tortilla (large)',serving:'1 tortilla',protein:4,carbs:36,fat:6,cals:210},
+  {id:'qf_pasta',name:'Pasta (cooked)',serving:'1 cup',protein:7,carbs:43,fat:1.3,cals:220}
+];
+function findFood(id){
+  return QUICK_FOODS.find(f=>f.id===id)||(S.customFoods||[]).find(f=>f.id===id)||null;
+}
+function allFoods(){return[...QUICK_FOODS,...(S.customFoods||[])];}
+function searchFoods(q){
+  if(!q)return[];
+  const lc=q.toLowerCase();
+  return allFoods().filter(f=>f.name.toLowerCase().includes(lc)).slice(0,20);
+}
+function getStarredFoods(){return(S.starredFoods||[]).map(findFood).filter(Boolean);}
+function getRecentFoods(){return(S.recentFoods||[]).map(findFood).filter(Boolean).slice(0,20);}
+function toggleStar(id){
+  if(!S.starredFoods)S.starredFoods=[];
+  const idx=S.starredFoods.indexOf(id);
+  if(idx>=0)S.starredFoods.splice(idx,1);else S.starredFoods.push(id);
+  save();
+}
+function isStarred(id){return(S.starredFoods||[]).includes(id);}
+function trackRecent(id){
+  if(!S.recentFoods)S.recentFoods=[];
+  S.recentFoods=S.recentFoods.filter(x=>x!==id);
+  S.recentFoods.unshift(id);
+  if(S.recentFoods.length>30)S.recentFoods.length=30;
+}
+function trackRecentMeal(savedMealId){
+  if(!S.recentSavedMeals)S.recentSavedMeals=[];
+  S.recentSavedMeals=S.recentSavedMeals.filter(x=>x!==savedMealId);
+  S.recentSavedMeals.unshift(savedMealId);
+  if(S.recentSavedMeals.length>15)S.recentSavedMeals.length=15;
+}
+// ═══════════════════════════════════════════════════
 // NUTRITION
 // ═══════════════════════════════════════════════════
 function getMacroStreak(){
@@ -2556,8 +2625,13 @@ function renderNutrition(c){
   let html=`<div class="ph"><div class="page-title">Nutrition</div><div style="display:flex;gap:7px">
     <button class="btn bts bsm" onclick="showMacroGoals()">Goals</button>
     <button class="btn bts bsm" onclick="showLogMacros()">Quick Log</button>
-    <button class="btn btp bsm" onclick="showAddMeal()">+ Meal</button>
   </div></div>`;
+
+  // Prominent action buttons
+  html+=`<div style="display:flex;gap:8px;padding:12px 13px 4px">
+    <button class="btn btp" style="flex:1;font-size:14px;gap:8px;padding:13px" onclick="showBarcodeScanner()"><span style="font-size:18px">📷</span> Scan</button>
+    <button class="btn btp" style="flex:1;font-size:14px;gap:8px;padding:13px;background:var(--green)" onclick="showAddMeal()"><span style="font-size:16px">＋</span> Log Meal</button>
+  </div>`;
 
   if(macroStreak>=3)html+=`<div style="background:var(--grdim);border-bottom:1px solid rgba(45,122,82,.15);padding:9px 13px;display:flex;align-items:center;gap:9px"><div style="font-size:18px">🔥</div><div style="font-size:13px;font-weight:600;color:var(--green)">${macroStreak}-day tracking streak</div></div>`;
 
@@ -2582,25 +2656,81 @@ function renderNutrition(c){
         <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--green)">${ml.cals||0}<span style="font-size:10px;opacity:.5">kcal</span></div>
         ${bar(ml.cals||0,g.cals,'var(--green)')}
       </div>
-    </div>`:`<div style="text-align:center;padding:16px 0 6px"><div style="font-size:30px;margin-bottom:8px">🥩</div><div style="font-size:13px;font-weight:600">Nothing logged today</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Tap + Meal to log by meal, or Quick Log for daily totals</div></div>`}
+    </div>`:`<div style="text-align:center;padding:16px 0 6px"><div style="font-size:30px;margin-bottom:8px">🥩</div><div style="font-size:13px;font-weight:600">Nothing logged today</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Scan a barcode, pick a starred food, or log manually</div></div>`}
     </div>
   </div>`;
 
-  // Today's meals list
-  if(todayMeals.length){
-    html+=`<div style="padding:12px 13px 6px;display:flex;align-items:center;justify-content:space-between">
-      <div class="ct">Today's Meals</div>
-    </div>
-    <div class="card">`;
-    todayMeals.forEach(m=>{
-      html+=`<div class="hi"><div style="flex:1">
-        <div class="hn">${m.name||'Meal'}</div>
-        <div class="hm">${[m.protein?`P ${m.protein}g`:'',m.carbs?`C ${m.carbs}g`:'',m.fat?`F ${m.fat}g`:''].filter(Boolean).join(' · ')}</div>
-      </div>
-      <div class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0;margin-right:10px">${m.cals||0}kcal</div>
-      <button class="ib delbtn" style="font-size:11px" onclick="deleteMeal('${m.id}')">✕</button></div>`;
+  // Quick access — starred foods
+  const starred=getStarredFoods();
+  if(starred.length){
+    html+=`<div style="padding:12px 13px 6px"><div class="ct">★ Starred Foods</div></div>
+    <div style="display:flex;gap:8px;padding:0 13px 8px;overflow-x:auto;scrollbar-width:none">`;
+    starred.forEach(f=>{
+      html+=`<button onclick="quickLogFood('${f.id}')" style="flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:left;min-width:120px;cursor:pointer">
+        <div style="font-size:13px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">${f.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${f.serving} · ${f.cals}kcal</div>
+      </button>`;
     });
     html+=`</div>`;
+  }
+
+  // Quick access — recent foods
+  const recent=getRecentFoods().slice(0,8);
+  if(recent.length){
+    html+=`<div style="padding:6px 13px 6px"><div class="ct">Recent</div></div>
+    <div style="display:flex;gap:8px;padding:0 13px 8px;overflow-x:auto;scrollbar-width:none">`;
+    recent.forEach(f=>{
+      html+=`<button onclick="quickLogFood('${f.id}')" style="flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:left;min-width:110px;cursor:pointer">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${f.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${f.cals}kcal</div>
+      </button>`;
+    });
+    html+=`</div>`;
+  }
+
+  // Today's meals — grouped by type, collapsible
+  if(todayMeals.length){
+    if(!window._expandedMealGroups)window._expandedMealGroups={};
+    html+=`<div style="padding:12px 13px 6px"><div class="ct">Today's Meals</div></div>`;
+    const typeOrder=['Breakfast','Lunch','Dinner','Pre-workout','Post-workout','Snack'];
+    const grouped={};
+    todayMeals.forEach(m=>{
+      const t=m.type||m.name||'Other';
+      const key=typeOrder.includes(t)?t:'Other';
+      if(!grouped[key])grouped[key]=[];
+      grouped[key].push(m);
+    });
+    [...typeOrder,'Other'].forEach(type=>{
+      const meals=grouped[type];if(!meals||!meals.length)return;
+      const gp=meals.reduce((t,m)=>t+(parseFloat(m.protein)||0),0);
+      const gc=meals.reduce((t,m)=>t+(parseFloat(m.carbs)||0),0);
+      const gf=meals.reduce((t,m)=>t+(parseFloat(m.fat)||0),0);
+      const gk=meals.reduce((t,m)=>t+(parseFloat(m.cals)||0),0);
+      const expanded=!!window._expandedMealGroups[type];
+      html+=`<div class="card" style="margin:0 13px 6px;overflow:hidden">
+        <div style="display:flex;align-items:center;padding:10px 13px;cursor:pointer;gap:8px" onclick="toggleMealGroup('${type}')">
+          <div style="font-size:11px;color:var(--muted);transition:transform .15s;transform:rotate(${expanded?'90':'0'}deg)">▶</div>
+          <div style="flex:1;font-size:14px;font-weight:600">${type}</div>
+          <div style="font-size:11px;color:var(--muted)">${[gp?'P'+Math.round(gp):null,gc?'C'+Math.round(gc):null,gf?'F'+Math.round(gf):null].filter(Boolean).join(' · ')}</div>
+          <div class="mono" style="font-size:12px;font-weight:600;color:var(--navy)">${Math.round(gk)}kcal</div>
+        </div>`;
+      if(expanded){
+        meals.forEach(m=>{
+          const hasItems=m.items&&m.items.length;
+          const displayName=m.name&&m.name!==type?m.name:'';
+          html+=`<div style="padding:6px 13px 6px 30px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:6px">
+            <div style="flex:1;min-width:0">
+              ${displayName?`<div style="font-size:12px;font-weight:600;margin-bottom:1px">${displayName}</div>`:''}
+              ${hasItems?`<div style="font-size:11px;color:var(--muted)">${m.items.map(it=>(it.qty>1?it.qty+'x ':'')+it.name).join(', ')}</div>`
+              :`<div style="font-size:11px;color:var(--muted)">P${Math.round(m.protein)||0}g · C${Math.round(m.carbs)||0}g · F${Math.round(m.fat)||0}g</div>`}
+            </div>
+            <div class="mono" style="font-size:11px;color:var(--muted);flex-shrink:0">${Math.round(m.cals)||0}kcal</div>
+            <button class="ib delbtn" style="font-size:10px;flex-shrink:0" onclick="deleteMeal('${m.id}')">✕</button>
+          </div>`;
+        });
+      }
+      html+=`</div>`;
+    });
   }
 
   // Protein insight
@@ -2722,39 +2852,77 @@ function showMacroGoals(){
 }
 function saveMacroGoals(){S.macroGoals={protein:parseFloat(document.getElementById('mg-pro')?.value)||150,carbs:parseFloat(document.getElementById('mg-carb')?.value)||200,fat:parseFloat(document.getElementById('mg-fat')?.value)||60,cals:parseInt(document.getElementById('mg-cal')?.value)||2000};save();dismissOv(document.getElementById('mg-ov'));toast('Goals updated','green');renderNutrition(document.getElementById('content'));}
 
+// ═══════════════════════════════════════════════════
+// MEAL BUILDER (multi-item)
+// ═══════════════════════════════════════════════════
+let _mealItems=[];
+const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout'];
+function quickLogFood(foodId){
+  const f=findFood(foodId);if(!f)return;
+  if(!S.meals)S.meals=[];
+  trackRecent(foodId);
+  S.meals.push({id:uid(),date:today(),type:'Snack',name:f.name,
+    items:[{foodId:f.id,name:f.name,qty:1,serving:f.serving,protein:f.protein,carbs:f.carbs,fat:f.fat,cals:f.cals}],
+    protein:f.protein,carbs:f.carbs,fat:f.fat,cals:f.cals});
+  save();toast(f.name+' logged!','green');renderNutrition(document.getElementById('content'));
+}
 function showAddMeal(ds){
   const date=ds||today();
-  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
+  _mealItems=[];
   const ov=makeOv('meal-ov');
-  ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">Log Meal</div>
-    <div class="fg"><label class="fl">Date</label><input type="date" id="meal-date" value="${date}" max="${today()}"></div>
-    <div class="fg"><label class="fl">Meal</label>
-      <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:6px">
-        ${MEAL_TYPES.map((t,i)=>`<button class="chip${i===0?' on':''}" id="mtype-${i}" onclick="selMealType(${i})" style="flex-shrink:0">${t}</button>`).join('')}
+  ov.innerHTML=buildMealModalHTML(date);
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  window._mealType=0;window._mealFoodTab='starred';
+  renderFoodTab();
+  setTimeout(()=>document.getElementById('food-search')?.focus(),200);
+}
+function buildMealModalHTML(date){
+  return`<div class="modal"><div class="mh"></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input type="text" id="food-search" placeholder="Search foods and meals…" oninput="onFoodSearch()" style="flex:1">
+      <button class="btn btp bsm" onclick="showBarcodeScanner()" style="gap:5px;flex-shrink:0"><span style="font-size:14px">📷</span> Scan</button>
+    </div>
+    <input type="date" id="meal-date" value="${date}" max="${today()}" style="display:none">
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 -16px;padding:0 16px">
+      <button class="ptab on" id="ftab-starred" onclick="setFoodTab('starred')">★ Starred</button>
+      <button class="ptab" id="ftab-recent" onclick="setFoodTab('recent')">Recent</button>
+      <button class="ptab" id="ftab-all" onclick="setFoodTab('all')">Foods</button>
+      <button class="ptab" id="ftab-combos" onclick="setFoodTab('combos')">Saved Meals</button>
+    </div>
+    <div id="food-list" style="max-height:200px;overflow-y:auto;margin:0 -16px;padding:0 16px"></div>
+    <div id="meal-items-section" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="ct">Meal Items</div>
+        <div id="meal-total" class="mono" style="font-size:13px;font-weight:600;color:var(--navy)"></div>
       </div>
-      <input type="text" id="meal-name" placeholder="Or enter custom name" style="margin-top:2px">
+      <div id="meal-items-list"></div>
     </div>
-    <div style="margin-bottom:12px">
-      <button class="btn bts bfw" onclick="showBarcodeScanner()" style="gap:8px"><span style="font-size:16px">📷</span> Scan Barcode</button>
+    <div id="manual-entry-toggle" style="margin-top:10px">
+      <button class="btn btg bfw" style="font-size:12px" onclick="toggleManualEntry()">Enter macros manually ▾</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
-      <div class="fg" style="margin-bottom:0"><label class="fl">Protein (g)</label><input type="number" inputmode="decimal" id="meal-pro" placeholder="0" oninput="autoCalcMeal()"></div>
-      <div class="fg" style="margin-bottom:0"><label class="fl">Carbs (g)</label><input type="number" inputmode="decimal" id="meal-carb" placeholder="0" oninput="autoCalcMeal()"></div>
-      <div class="fg" style="margin-bottom:0"><label class="fl">Fat (g)</label><input type="number" inputmode="decimal" id="meal-fat" placeholder="0" oninput="autoCalcMeal()"></div>
-      <div class="fg" style="margin-bottom:0"><label class="fl">Calories</label><input type="number" inputmode="numeric" id="meal-cal" placeholder="Auto"></div>
+    <div id="manual-entry" style="display:none;margin-top:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
+        <div class="fg" style="margin-bottom:0"><label class="fl">Protein (g)</label><input type="number" inputmode="decimal" id="meal-pro" placeholder="0" oninput="autoCalcMeal()"></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Carbs (g)</label><input type="number" inputmode="decimal" id="meal-carb" placeholder="0" oninput="autoCalcMeal()"></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Fat (g)</label><input type="number" inputmode="decimal" id="meal-fat" placeholder="0" oninput="autoCalcMeal()"></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Calories</label><input type="number" inputmode="numeric" id="meal-cal" placeholder="Auto"></div>
+      </div>
     </div>
-    <button class="btn btp bfw" onclick="saveMeal()">Add Meal</button>
+    <div style="margin-top:12px">
+      <button class="btn btp bfw" onclick="saveMeal()">Log Meal</button>
+      <button class="btn bts bfw" style="margin-top:8px;display:none" id="save-combo-btn" onclick="saveAsCombo()">💾 Save as Reusable Meal</button>
+    </div>
     <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('meal-ov'))">Cancel</button>
   </div>`;
-  document.body.appendChild(ov);attachSwipeDown(ov);
-  window._mealType=0;
 }
-function selMealType(i){
-  window._mealType=i;
-  document.querySelectorAll('#meal-ov .chip').forEach((c,j)=>c.classList.toggle('on',j===i));
-  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
-  const nameEl=document.getElementById('meal-name');
-  if(nameEl&&!nameEl.value)nameEl.placeholder=MEAL_TYPES[i]||'Meal';
+function selMealType(i){window._mealType=i;}
+function toggleManualEntry(){
+  const el=document.getElementById('manual-entry');
+  const btn=document.getElementById('manual-entry-toggle');
+  if(!el)return;
+  const show=el.style.display==='none';
+  el.style.display=show?'block':'none';
+  if(btn)btn.innerHTML=`<button class="btn btg bfw" style="font-size:12px" onclick="toggleManualEntry()">Enter macros manually ${show?'▴':'▾'}</button>`;
 }
 function autoCalcMeal(){
   const p=parseFloat(document.getElementById('meal-pro')?.value)||0;
@@ -2763,21 +2931,219 @@ function autoCalcMeal(){
   const calEl=document.getElementById('meal-cal');
   if(calEl&&!calEl.value)calEl.placeholder=Math.round(p*4+c*4+f*9)||'Auto';
 }
+function setFoodTab(tab){
+  window._mealFoodTab=tab;
+  document.querySelectorAll('#meal-ov .ptab').forEach(t=>t.classList.remove('on'));
+  const el=document.getElementById('ftab-'+tab);if(el)el.classList.add('on');
+  document.getElementById('food-search').value='';
+  renderFoodTab();
+}
+function onFoodSearch(){
+  const q=document.getElementById('food-search')?.value?.trim()||'';
+  renderFoodTab(q);
+}
+function renderFoodTab(query){
+  const el=document.getElementById('food-list');if(!el)return;
+  const tab=window._mealFoodTab||'starred';
+  let foods=[];let savedMealMatches=[];
+  if(query){
+    foods=searchFoods(query);
+    const lc=query.toLowerCase();
+    savedMealMatches=(S.savedMeals||[]).filter(c=>c.name.toLowerCase().includes(lc));
+  }else if(tab==='starred'){
+    foods=getStarredFoods();
+    if(!foods.length){el.innerHTML=`<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No starred foods yet.<br>Tap ★ on any food to star it.</div>`;return;}
+  }else if(tab==='recent'){
+    // Merge recent foods + recent saved meals
+    const recentFoods=getRecentFoods();
+    const recentMeals=(S.recentSavedMeals||[]).map(id=>(S.savedMeals||[]).find(c=>c.id===id)).filter(Boolean);
+    let html='';
+    if(recentMeals.length){
+      html+=recentMeals.map(c=>{
+        const totCals=c.items.reduce((t,it)=>t+((it.cals||0)*it.qty),0);
+        return`<div class="hi" style="cursor:pointer" onclick="addComboToMeal('${c.id}')">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">${c.name} <span style="font-size:10px;color:var(--green);font-weight:700">MEAL</span></div>
+            <div style="font-size:11px;color:var(--muted)">${c.items.map(it=>it.name).join(', ')}</div>
+          </div>
+          <div class="mono" style="font-size:12px;font-weight:600;color:var(--navy);flex-shrink:0">${Math.round(totCals)}kcal</div>
+        </div>`;
+      }).join('');
+    }
+    html+=recentFoods.map(f=>renderFoodRow(f)).join('');
+    if(!html)html=`<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No recent items.<br>Foods you log will appear here.</div>`;
+    el.innerHTML=html;return;
+  }else if(tab==='all'){
+    foods=allFoods();
+  }else if(tab==='combos'){
+    renderComboList(el);return;
+  }
+  // Render saved meal matches first (from search), then foods
+  let html='';
+  if(savedMealMatches.length){
+    html+=savedMealMatches.map(c=>{
+      const totCals=c.items.reduce((t,it)=>t+((it.cals||0)*it.qty),0);
+      return`<div class="hi" style="cursor:pointer" onclick="addComboToMeal('${c.id}')">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600">${c.name} <span style="font-size:10px;color:var(--green);font-weight:700">MEAL</span></div>
+          <div style="font-size:11px;color:var(--muted)">${c.items.map(it=>it.name).join(', ')}</div>
+        </div>
+        <div class="mono" style="font-size:12px;font-weight:600;color:var(--navy);flex-shrink:0">${Math.round(totCals)}kcal</div>
+      </div>`;
+    }).join('');
+  }
+  html+=foods.map(f=>renderFoodRow(f)).join('');
+  el.innerHTML=html;
+}
+function renderFoodRow(f){
+  return`<div class="hi" style="cursor:pointer" onclick="addFoodToMeal('${f.id}')">
+    <button class="ib" style="font-size:14px;flex-shrink:0;margin-right:6px;color:${isStarred(f.id)?'var(--gold)':'var(--muted2)'}" onclick="event.stopPropagation();toggleStar('${f.id}');renderFoodTab()">★</button>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
+      <div style="font-size:11px;color:var(--muted)">P${Math.round(f.protein)}g · C${Math.round(f.carbs)}g · F${Math.round(f.fat)}g</div>
+    </div>
+    <div style="flex-shrink:0;text-align:right">
+      <div class="mono" style="font-size:12px;font-weight:600;color:var(--navy)">${Math.round(f.cals)}kcal</div>
+      <div style="font-size:10px;color:var(--muted)">${f.serving}</div>
+    </div>
+  </div>`;
+}
+function renderComboList(el){
+  const combos=S.savedMeals||[];
+  if(!combos.length){el.innerHTML=`<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No saved meals yet.<br>Build a meal and tap "Save as Reusable Meal" to save it.</div>`;return;}
+  el.innerHTML=combos.map(c=>{
+    const totCals=c.items.reduce((t,it)=>t+((it.cals||0)*it.qty),0);
+    return`<div class="hi" style="cursor:pointer" onclick="addComboToMeal('${c.id}')">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${c.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${c.items.length} items · ${Math.round(totCals)}kcal</div>
+      </div>
+      <button class="ib delbtn" style="font-size:11px;flex-shrink:0" onclick="event.stopPropagation();deleteCombo('${c.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+function addFoodToMeal(foodId){
+  const f=findFood(foodId);if(!f)return;
+  const existing=_mealItems.find(it=>it.foodId===foodId);
+  if(existing){existing.qty++;updateMealItems();return;}
+  _mealItems.push({foodId:f.id,name:f.name,qty:1,serving:f.serving,protein:f.protein,carbs:f.carbs,fat:f.fat,cals:f.cals});
+  updateMealItems();
+}
+function addComboToMeal(comboId){
+  const combo=(S.savedMeals||[]).find(c=>c.id===comboId);if(!combo)return;
+  window._loggedSavedMealId=comboId;
+  combo.items.forEach(it=>{
+    const existing=_mealItems.find(x=>x.foodId===it.foodId);
+    if(existing){existing.qty+=it.qty;}
+    else{_mealItems.push({...it});}
+  });
+  updateMealItems();
+}
+function deleteCombo(id){
+  customConfirm('Delete this saved meal?','Delete',()=>{
+    S.savedMeals=(S.savedMeals||[]).filter(c=>c.id!==id);save();renderFoodTab();
+  });
+}
+function adjMealItem(idx,d){
+  if(!_mealItems[idx])return;
+  _mealItems[idx].qty=Math.max(0.5,Math.round((_mealItems[idx].qty+d)*10)/10);
+  updateMealItems();
+}
+function removeMealItem(idx){_mealItems.splice(idx,1);updateMealItems();}
+function updateMealItems(){
+  const sec=document.getElementById('meal-items-section');
+  const list=document.getElementById('meal-items-list');
+  const total=document.getElementById('meal-total');
+  const comboBtn=document.getElementById('save-combo-btn');
+  if(!sec||!list)return;
+  if(!_mealItems.length){sec.style.display='none';if(comboBtn)comboBtn.style.display='none';return;}
+  sec.style.display='block';
+  if(comboBtn)comboBtn.style.display=_mealItems.length>=2?'block':'none';
+  let tp=0,tc=0,tf=0,tk=0;
+  list.innerHTML=_mealItems.map((it,i)=>{
+    const ip=r1(it.protein*it.qty),ic=r1(it.carbs*it.qty),ifat=r1(it.fat*it.qty),ik=Math.round(it.cals*it.qty);
+    tp+=ip;tc+=ic;tf+=ifat;tk+=ik;
+    return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--hair)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.name}</div>
+        <div style="font-size:10px;color:var(--muted)">P${Math.round(ip)}g C${Math.round(ic)}g F${Math.round(ifat)}g</div>
+      </div>
+      <button class="ib" style="font-size:13px;font-weight:700;width:28px;height:28px" onclick="adjMealItem(${i},-0.5)">−</button>
+      <div class="mono" style="font-size:13px;font-weight:600;width:24px;text-align:center">${it.qty%1===0?it.qty:it.qty.toFixed(1)}</div>
+      <button class="ib" style="font-size:13px;font-weight:700;width:28px;height:28px" onclick="adjMealItem(${i},0.5)">+</button>
+      <div class="mono" style="font-size:11px;color:var(--muted);width:45px;text-align:right">${ik}kcal</div>
+      <button class="ib delbtn" style="font-size:10px" onclick="removeMealItem(${i})">✕</button>
+    </div>`;
+  }).join('');
+  if(total)total.textContent=`${Math.round(tk)} kcal`;
+}
 function saveMeal(){
-  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
-  const nameEl=document.getElementById('meal-name');
-  const name=nameEl?.value?.trim()||MEAL_TYPES[window._mealType||0]||'Meal';
-  const p=parseFloat(document.getElementById('meal-pro')?.value)||0;
-  const carb=parseFloat(document.getElementById('meal-carb')?.value)||0;
-  const f=parseFloat(document.getElementById('meal-fat')?.value)||0;
-  const calEl=document.getElementById('meal-cal');
-  const cals=calEl?.value?parseFloat(calEl.value):Math.round(p*4+carb*4+f*9);
+  const mp=parseFloat(document.getElementById('meal-pro')?.value)||0;
+  const mc=parseFloat(document.getElementById('meal-carb')?.value)||0;
+  const mf=parseFloat(document.getElementById('meal-fat')?.value)||0;
+  const mcEl=document.getElementById('meal-cal');
+  const mCals=mcEl?.value?parseFloat(mcEl.value):0;
+  const hasManual=!!(mp||mc||mf||mCals);
+  if(!_mealItems.length&&!hasManual){toast('Add foods or enter macros');return;}
+  const ov=makeOv('mtype-ov');
+  ov.innerHTML=`<div class="modal" style="max-height:320px"><div class="mh"></div>
+    <div style="font-size:15px;font-weight:600;margin-bottom:12px;text-align:center">What meal is this?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${MEAL_TYPES.map(t=>`<button class="btn bts" style="padding:14px;font-size:14px;font-weight:600" onclick="doSaveMealWithType('${t}')">${t}</button>`).join('')}
+    </div>
+    <button class="btn btg bfw" style="margin-top:10px" onclick="dismissOv(document.getElementById('mtype-ov'))">Back</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+}
+function doSaveMealWithType(mealType){
+  dismissOv(document.getElementById('mtype-ov'));
   const date=document.getElementById('meal-date')?.value||today();
-  if(!p&&!carb&&!f&&!cals){toast('Enter at least one value');return;}
+  const mp=parseFloat(document.getElementById('meal-pro')?.value)||0;
+  const mc=parseFloat(document.getElementById('meal-carb')?.value)||0;
+  const mf=parseFloat(document.getElementById('meal-fat')?.value)||0;
+  const mcEl=document.getElementById('meal-cal');
+  const mCals=mcEl?.value?parseFloat(mcEl.value):0;
+  const hasManual=!!(mp||mc||mf||mCals);
   if(!S.meals)S.meals=[];
-  S.meals.push({id:uid(),date,name,protein:p,carbs:carb,fat:f,cals});
-  save();dismissOv(document.getElementById('meal-ov'));
-  toast(`${name} logged!`,'green');
+  if(_mealItems.length>0){
+    let tp=0,tc=0,tf=0,tk=0;
+    const items=_mealItems.map(it=>{
+      const ip=r1(it.protein*it.qty),ic=r1(it.carbs*it.qty),ifat=r1(it.fat*it.qty),ik=Math.round(it.cals*it.qty);
+      tp+=ip;tc+=ic;tf+=ifat;tk+=ik;
+      if(!window._loggedSavedMealId)trackRecent(it.foodId);
+      return{foodId:it.foodId,name:it.name,qty:it.qty,serving:it.serving,protein:ip,carbs:ic,fat:ifat,cals:ik};
+    });
+    if(hasManual){tp+=mp;tc+=mc;tf+=mf;tk+=(mCals||Math.round(mp*4+mc*4+mf*9));}
+    if(window._loggedSavedMealId){trackRecentMeal(window._loggedSavedMealId);window._loggedSavedMealId=null;}
+    S.meals.push({id:uid(),date,type:mealType,name:mealType,items,protein:r1(tp),carbs:r1(tc),fat:r1(tf),cals:Math.round(tk)});
+  }else{
+    const cals=mCals||Math.round(mp*4+mc*4+mf*9);
+    S.meals.push({id:uid(),date,type:mealType,name:mealType,protein:mp,carbs:mc,fat:mf,cals});
+  }
+  _mealItems=[];save();dismissOv(document.getElementById('meal-ov'));
+  toast(mealType+' logged!','green');renderNutrition(document.getElementById('content'));
+}
+function saveAsCombo(){
+  if(_mealItems.length<2){toast('Add at least 2 items');return;}
+  const ov=makeOv('combo-ov');
+  ov.innerHTML=`<div class="modal" style="max-height:260px"><div class="mh"></div><div class="mt">Save as Reusable Meal</div>
+    <div class="fg"><label class="fl">Meal name</label><input type="text" id="combo-name" placeholder="e.g. Morning Eggs, Post-Workout Shake"></div>
+    <button class="btn btp bfw" onclick="doSaveCombo()">Save Meal</button>
+    <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('combo-ov'))">Cancel</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  setTimeout(()=>document.getElementById('combo-name')?.focus(),150);
+}
+function doSaveCombo(){
+  const name=document.getElementById('combo-name')?.value?.trim();
+  if(!name){toast('Enter a name');return;}
+  if(!S.savedMeals)S.savedMeals=[];
+  S.savedMeals.push({id:uid(),name,items:_mealItems.map(it=>({foodId:it.foodId,name:it.name,qty:it.qty,serving:it.serving,protein:it.protein,carbs:it.carbs,fat:it.fat,cals:it.cals}))});
+  save();dismissOv(document.getElementById('combo-ov'));toast('Meal saved!','green');
+}
+function toggleMealGroup(type){
+  if(!window._expandedMealGroups)window._expandedMealGroups={};
+  window._expandedMealGroups[type]=!window._expandedMealGroups[type];
   renderNutrition(document.getElementById('content'));
 }
 function deleteMeal(id){
@@ -2801,21 +3167,26 @@ function loadScannerLib(){
   });
 }
 function showBarcodeScanner(){
-  // Capture context from meal modal if open
-  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
-  window._scanMealDate=document.getElementById('meal-date')?.value||today();
-  window._scanMealTypeName=MEAL_TYPES[window._mealType||0]||'Snack';
+  // Close meal modal if open (but preserve items)
   const mealOv=document.getElementById('meal-ov');
-  if(mealOv)dismissOv(mealOv);
+  if(mealOv){
+    window._scanReturnToMeal=true;
+    window._scanMealDate=document.getElementById('meal-date')?.value||today();
+    window._scanMealTypeIdx=window._mealType||0;
+    dismissOv(mealOv);
+  }else{
+    window._scanReturnToMeal=false;
+  }
   const ov=makeOv('scan-ov');
   ov.innerHTML=`<div class="modal" style="max-height:96vh;padding-bottom:calc(30px + var(--sb))">
     <div class="mh"></div>
     <div class="mt">Scan Barcode</div>
-    <div id="scan-reader" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px"></div>
-    <div id="scan-status" style="text-align:center;padding:12px;font-size:13px;color:var(--muted)">
-      Loading camera…
+    <div id="scan-reader" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px;position:relative"></div>
+    <div id="scan-status" style="text-align:center;padding:12px;font-size:13px;color:var(--muted)">Loading camera…</div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btp" style="flex:1;gap:6px" onclick="captureAndScan()"><span style="font-size:14px">⏸</span> Freeze + Scan</button>
     </div>
-    <div style="margin-top:4px;display:flex;gap:8px">
+    <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn bts" style="flex:1" onclick="showManualBarcode()">Enter code</button>
       <button class="btn btg" style="flex:1" onclick="stopScanner()">Cancel</button>
     </div>
@@ -2831,7 +3202,8 @@ async function startScanner(){
     if(statusEl)statusEl.textContent='Point camera at a barcode…';
     await _html5Qr.start(
       {facingMode:'environment'},
-      {fps:10,qrbox:{width:250,height:120},aspectRatio:1.333},
+      {fps:15,qrbox:{width:280,height:150},
+       experimentalFeatures:{useBarCodeDetectorIfSupported:true}},
       onBarcodeDetected,
       ()=>{}
     );
@@ -2845,14 +3217,44 @@ function stopScanner(){
   const ov=document.getElementById('scan-ov');
   if(ov)dismissOv(ov);
 }
-function showManualBarcode(){
+async function captureAndScan(){
+  const video=document.querySelector('#scan-reader video');
   const statusEl=document.getElementById('scan-status');
-  if(!statusEl)return;
+  if(!video){if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">No camera feed available</div>';return;}
+  // Freeze the frame
+  if(_html5Qr){await _html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  if(statusEl)statusEl.innerHTML='<div style="color:var(--navy);font-weight:600">Analyzing frame…</div>';
+  // Try native BarcodeDetector
+  if(typeof BarcodeDetector!=='undefined'){
+    try{
+      const det=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39']});
+      const results=await det.detect(canvas);
+      if(results.length){onBarcodeDetected(results[0].rawValue);return;}
+    }catch(e){}
+  }
+  // Fallback: html5-qrcode file scan
+  try{
+    const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
+    if(!blob)throw new Error('no blob');
+    const file=new File([blob],'frame.png',{type:'image/png'});
+    const result=await Html5Qrcode.scanFileV2(file,false);
+    onBarcodeDetected(result.decodedText);
+  }catch(e){
+    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">No barcode detected — reposition and try again</div>';
+    // Restart live scanner
+    setTimeout(startScanner,1200);
+  }
+}
+function showManualBarcode(){
+  const statusEl=document.getElementById('scan-status');if(!statusEl)return;
+  if(_html5Qr){_html5Qr.stop().catch(()=>{});_html5Qr=null;}
   statusEl.innerHTML=`<div style="display:flex;gap:8px;margin-top:4px">
     <input type="text" id="manual-barcode" inputmode="numeric" placeholder="Enter barcode number" style="flex:1;font-size:15px">
     <button class="btn btp bsm" onclick="submitManualBarcode()">Look up</button>
   </div>`;
-  if(_html5Qr){_html5Qr.stop().catch(()=>{});_html5Qr=null;}
   setTimeout(()=>document.getElementById('manual-barcode')?.focus(),100);
 }
 function submitManualBarcode(){
@@ -2864,12 +3266,10 @@ async function onBarcodeDetected(barcode){
   if(_html5Qr){await _html5Qr.stop().catch(()=>{});_html5Qr=null;}
   const statusEl=document.getElementById('scan-status');
   if(statusEl)statusEl.innerHTML=`<div style="font-weight:600;color:var(--navy)">Found: ${barcode}</div><div style="margin-top:4px;font-size:12px">Looking up product…</div>`;
-  // Check cache
   if(!S.foodCache)S.foodCache={};
   if(S.foodCache[barcode]){showServingPicker(S.foodCache[barcode],barcode);return;}
-  // Open Food Facts lookup
   try{
-    const res=await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+    const res=await fetch('https://world.openfoodfacts.org/api/v2/product/'+barcode+'.json');
     const data=await res.json();
     if(data.status===1&&data.product){
       const pr=data.product;const n=pr.nutriments||{};
@@ -2878,35 +3278,66 @@ async function onBarcodeDetected(barcode){
         brand:pr.brands||'',
         serving:pr.serving_size||'',
         servingG:parseFloat(pr.serving_quantity)||0,
-        per100:{
-          protein:Math.round((n.proteins_100g||0)*10)/10,
-          carbs:Math.round((n.carbohydrates_100g||0)*10)/10,
-          fat:Math.round((n.fat_100g||0)*10)/10,
-          cals:Math.round(n['energy-kcal_100g']||0)
-        },
-        perServing:{
-          protein:Math.round((n.proteins_serving||0)*10)/10,
-          carbs:Math.round((n.carbohydrates_serving||0)*10)/10,
-          fat:Math.round((n.fat_serving||0)*10)/10,
-          cals:Math.round(n['energy-kcal_serving']||0)
-        }
+        per100:{protein:r1(n.proteins_100g||0),carbs:r1(n.carbohydrates_100g||0),fat:r1(n.fat_100g||0),cals:Math.round(n['energy-kcal_100g']||0)},
+        perServing:{protein:r1(n.proteins_serving||0),carbs:r1(n.carbohydrates_serving||0),fat:r1(n.fat_serving||0),cals:Math.round(n['energy-kcal_serving']||0)}
       };
       S.foodCache[barcode]=product;save();
       showServingPicker(product,barcode);
     }else{
-      if(statusEl)statusEl.innerHTML=`<div style="color:var(--red);font-weight:600">Product not found</div><div style="font-size:12px;margin-top:4px;color:var(--muted)">Barcode: ${barcode}<br>Not in Open Food Facts — enter macros manually</div>`;
+      if(statusEl)statusEl.innerHTML=`<div style="color:var(--red);font-weight:600">Product not found</div>
+        <div style="font-size:12px;margin-top:4px;color:var(--muted)">Barcode: ${barcode}</div>
+        <button class="btn btp bfw" style="margin-top:10px" onclick="showCreateCustomFood('${barcode}')">Create Custom Food</button>`;
     }
   }catch(e){
     if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">Network error — check connection</div>';
   }
 }
-function showServingPicker(product){
-  const scanOv=document.getElementById('scan-ov');
-  if(scanOv)dismissOv(scanOv);
+function showCreateCustomFood(barcode){
+  const scanOv=document.getElementById('scan-ov');if(scanOv)dismissOv(scanOv);
+  const ov=makeOv('custfood-ov');
+  ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">Create Food</div>
+    <div style="font-size:11px;color:var(--muted);margin:-10px 0 12px">Barcode: ${barcode} — will auto-fill on next scan</div>
+    <div class="fg"><label class="fl">Food Name</label><input type="text" id="cf-name" placeholder="e.g. Kirkland Protein Bar"></div>
+    <div class="fg"><label class="fl">Serving Size</label><input type="text" id="cf-serving" placeholder="e.g. 1 bar, 1 cup, 100g"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
+      <div class="fg" style="margin-bottom:0"><label class="fl">Protein (g)</label><input type="number" inputmode="decimal" id="cf-pro" placeholder="0"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Carbs (g)</label><input type="number" inputmode="decimal" id="cf-carb" placeholder="0"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Fat (g)</label><input type="number" inputmode="decimal" id="cf-fat" placeholder="0"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Calories</label><input type="number" inputmode="numeric" id="cf-cal" placeholder="Auto"></div>
+    </div>
+    <button class="btn btp bfw" onclick="doCreateCustomFood('${barcode}')">Save Food</button>
+    <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('custfood-ov'))">Cancel</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  setTimeout(()=>document.getElementById('cf-name')?.focus(),150);
+}
+function doCreateCustomFood(barcode){
+  const name=document.getElementById('cf-name')?.value?.trim();
+  if(!name){toast('Enter a name');return;}
+  const pro=parseFloat(document.getElementById('cf-pro')?.value)||0;
+  const carb=parseFloat(document.getElementById('cf-carb')?.value)||0;
+  const fat=parseFloat(document.getElementById('cf-fat')?.value)||0;
+  const calEl=document.getElementById('cf-cal');
+  const cals=calEl?.value?parseFloat(calEl.value):Math.round(pro*4+carb*4+fat*9);
+  const serving=document.getElementById('cf-serving')?.value?.trim()||'1 serving';
+  const cfId='cf_'+barcode;
+  if(!S.customFoods)S.customFoods=[];
+  S.customFoods=S.customFoods.filter(f=>f.id!==cfId);
+  S.customFoods.push({id:cfId,name,serving,barcode,protein:pro,carbs:carb,fat,cals});
+  // Cache for barcode lookup
+  if(!S.foodCache)S.foodCache={};
+  S.foodCache[barcode]={name,brand:'',serving,servingG:0,
+    per100:{protein:pro,carbs:carb,fat,cals},
+    perServing:{protein:pro,carbs:carb,fat,cals}};
+  save();dismissOv(document.getElementById('custfood-ov'));
+  toast(name+' saved!','green');
+}
+function showServingPicker(product,barcode){
+  const scanOv=document.getElementById('scan-ov');if(scanOv)dismissOv(scanOv);
   const ov=makeOv('serving-ov');
   const hasServing=product.servingG>0||(product.perServing.cals>0);
   const servingLabel=product.serving||(product.servingG?product.servingG+'g':'');
-  window._scanProduct=product;window._scanMode=hasServing?'serving':'100g';
+  window._scanProduct=product;window._scanMode=hasServing?'serving':'100g';window._scanBarcode=barcode;
   ov.innerHTML=`<div class="modal"><div class="mh"></div>
     <div style="margin-bottom:14px">
       <div class="mt" style="margin-bottom:2px">${product.name}</div>
@@ -2919,11 +3350,10 @@ function showServingPicker(product){
         <button class="chip" id="sv-custom" onclick="scanServingMode('custom')">Custom grams</button>
       </div>
     </div>
-    <div class="fg"><label class="fl">How many</label>
+    <div class="fg" id="scan-qty-row"><label class="fl">How many</label>
       <div style="display:flex;align-items:center;gap:10px">
         <button class="btn bts bsm" onclick="scanQtyAdj(-0.5)" style="width:40px;font-size:16px;font-weight:700">−</button>
-        <input type="number" inputmode="decimal" id="scan-qty" value="1" min="0.1" step="0.5"
-          style="text-align:center;width:70px;font-size:18px;font-weight:600" oninput="updateScanMacros()">
+        <input type="number" inputmode="decimal" id="scan-qty" value="1" min="0.1" step="0.5" style="text-align:center;width:70px;font-size:18px;font-weight:600" oninput="updateScanMacros()">
         <button class="btn bts bsm" onclick="scanQtyAdj(0.5)" style="width:40px;font-size:16px;font-weight:700">+</button>
       </div>
     </div>
@@ -2932,7 +3362,7 @@ function showServingPicker(product){
       <input type="number" inputmode="decimal" id="scan-grams" placeholder="Enter weight in grams" oninput="updateScanMacros()">
     </div>
     <div id="scan-macros" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0 16px;padding:14px;background:var(--bg);border-radius:12px"></div>
-    <button class="btn btp bfw" onclick="addScannedMeal()">Add to Meal Log</button>
+    <button class="btn btp bfw" onclick="addScannedFood()">Add</button>
     <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('serving-ov'))">Cancel</button>
   </div>`;
   document.body.appendChild(ov);attachSwipeDown(ov);
@@ -2942,10 +3372,8 @@ function scanServingMode(mode){
   window._scanMode=mode;
   document.querySelectorAll('#serving-ov .chip').forEach(c=>c.classList.remove('on'));
   const el=document.getElementById('sv-'+mode);if(el)el.classList.add('on');
-  const cg=document.getElementById('scan-custom-g');
-  if(cg)cg.style.display=mode==='custom'?'block':'none';
-  const qtyRow=document.getElementById('scan-qty')?.parentNode?.parentNode;
-  if(qtyRow)qtyRow.style.display=mode==='custom'?'none':'block';
+  const cg=document.getElementById('scan-custom-g');if(cg)cg.style.display=mode==='custom'?'block':'none';
+  const qr=document.getElementById('scan-qty-row');if(qr)qr.style.display=mode==='custom'?'none':'block';
   updateScanMacros();
 }
 function scanQtyAdj(d){
@@ -2953,14 +3381,13 @@ function scanQtyAdj(d){
   el.value=Math.max(0.5,Math.round(((parseFloat(el.value)||1)+d)*10)/10);
   updateScanMacros();
 }
+function r1(v){return Math.round(v*10)/10;}
 function calcScanMacros(){
   const p=window._scanProduct;if(!p)return null;
-  const mode=window._scanMode;
-  const qty=parseFloat(document.getElementById('scan-qty')?.value)||1;
+  const mode=window._scanMode;const qty=parseFloat(document.getElementById('scan-qty')?.value)||1;
   let base;
   if(mode==='serving'){
     base=p.perServing;
-    // If perServing is empty but we have servingG, derive from per100
     if((!base.cals&&!base.protein)&&p.servingG&&p.per100.cals){
       const mult=p.servingG/100;
       base={protein:p.per100.protein*mult,carbs:p.per100.carbs*mult,fat:p.per100.fat*mult,cals:p.per100.cals*mult};
@@ -2970,38 +3397,61 @@ function calcScanMacros(){
     const g=parseFloat(document.getElementById('scan-grams')?.value)||0;
     const mult=g/100;
     return{protein:r1(p.per100.protein*mult),carbs:r1(p.per100.carbs*mult),fat:r1(p.per100.fat*mult),cals:Math.round(p.per100.cals*mult)};
-  }else{ // 100g
+  }else{
     return{protein:r1(p.per100.protein*qty),carbs:r1(p.per100.carbs*qty),fat:r1(p.per100.fat*qty),cals:Math.round(p.per100.cals*qty)};
   }
 }
-function r1(v){return Math.round(v*10)/10;}
 function updateScanMacros(){
   const m=calcScanMacros();if(!m)return;
   window._scanMacros=m;
   const el=document.getElementById('scan-macros');if(!el)return;
   el.innerHTML=`
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Protein</div>
-      <div class="mono" style="font-size:20px;font-weight:600;color:var(--navy)">${m.protein}<span style="font-size:10px;opacity:.5">g</span></div></div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--navy)">${Math.round(m.protein)}<span style="font-size:10px;opacity:.5">g</span></div></div>
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Carbs</div>
-      <div class="mono" style="font-size:20px;font-weight:600;color:var(--gold)">${m.carbs}<span style="font-size:10px;opacity:.5">g</span></div></div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--gold)">${Math.round(m.carbs)}<span style="font-size:10px;opacity:.5">g</span></div></div>
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Fat</div>
-      <div class="mono" style="font-size:20px;font-weight:600;color:var(--red)">${m.fat}<span style="font-size:10px;opacity:.5">g</span></div></div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--red)">${Math.round(m.fat)}<span style="font-size:10px;opacity:.5">g</span></div></div>
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Calories</div>
       <div class="mono" style="font-size:20px;font-weight:600;color:var(--green)">${m.cals}<span style="font-size:10px;opacity:.5">kcal</span></div></div>`;
 }
-function addScannedMeal(){
-  const p=window._scanProduct,m=window._scanMacros;
+function addScannedFood(){
+  const p=window._scanProduct,m=window._scanMacros,barcode=window._scanBarcode;
   if(!p||!m){toast('No product data');return;}
   if(!m.protein&&!m.carbs&&!m.fat&&!m.cals){toast('No nutrition data for this product');return;}
-  if(!S.meals)S.meals=[];
-  const name=p.brand?`${p.name} (${p.brand})`:p.name;
-  const date=window._scanMealDate||today();
-  S.meals.push({id:uid(),date,name,protein:m.protein,carbs:m.carbs,fat:m.fat,cals:m.cals});
-  save();dismissOv(document.getElementById('serving-ov'));
-  toast(p.name+' logged!','green');
-  renderNutrition(document.getElementById('content'));
-  window._scanProduct=null;window._scanMacros=null;
+  // Save to customFoods for future use
+  const cfId='cf_'+barcode;
+  if(!S.customFoods)S.customFoods=[];
+  if(!S.customFoods.find(f=>f.id===cfId)){
+    S.customFoods.push({id:cfId,name:p.name+(p.brand?' ('+p.brand+')':''),
+      serving:p.serving||'1 serving',barcode,
+      protein:p.perServing.protein||p.per100.protein,carbs:p.perServing.carbs||p.per100.carbs,
+      fat:p.perServing.fat||p.per100.fat,cals:p.perServing.cals||p.per100.cals});
+  }
+  trackRecent(cfId);
+  dismissOv(document.getElementById('serving-ov'));
+  // If returning to meal builder, add as item
+  if(window._scanReturnToMeal){
+    _mealItems.push({foodId:cfId,name:p.name+(p.brand?' ('+p.brand+')':''),qty:1,
+      serving:p.serving||'1 serving',protein:m.protein,carbs:m.carbs,fat:m.fat,cals:m.cals});
+    showAddMeal(window._scanMealDate||today());
+    // Restore meal type
+    setTimeout(()=>{
+      if(window._scanMealTypeIdx!=null)selMealType(window._scanMealTypeIdx);
+      updateMealItems();
+    },100);
+  }else{
+    // Direct scan from nutrition page — log immediately
+    if(!S.meals)S.meals=[];
+    const name=p.brand?p.name+' ('+p.brand+')':p.name;
+    S.meals.push({id:uid(),date:today(),type:'Snack',name,
+      items:[{foodId:cfId,name,qty:1,serving:p.serving||'1 serving',protein:m.protein,carbs:m.carbs,fat:m.fat,cals:m.cals}],
+      protein:m.protein,carbs:m.carbs,fat:m.fat,cals:m.cals});
+    save();toast(p.name+' logged!','green');renderNutrition(document.getElementById('content'));
+  }
+  save();window._scanProduct=null;window._scanMacros=null;
 }
+
 // ═══════════════════════════════════════════════════
 // LIBRARY
 // ═══════════════════════════════════════════════════
@@ -3826,6 +4276,10 @@ function importData(){
         if(!S.schedule)S.schedule={type:'weekly',weeklyDays:[1,2,4,5],cycleOn:2,cycleOff:1,cycleStart:today(),overrides:{},routineOverrides:{}};
         if(!S.schedule.routineOverrides)S.schedule.routineOverrides={};
         if(!S.meals)S.meals=[];
+        if(!S.customFoods)S.customFoods=[];
+        if(!S.savedMeals)S.savedMeals=[];
+        if(!S.starredFoods)S.starredFoods=[];
+        if(!S.recentFoods)S.recentFoods=[];
         save();applyDark();
         document.getElementById('set-ov')?.remove();
         render();toast('Data imported!','green');
