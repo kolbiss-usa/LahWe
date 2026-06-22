@@ -264,6 +264,28 @@ textarea{resize:none;line-height:1.6}
 .rtn-type button{padding:6px 9px;font-size:10.5px;font-weight:600;background:var(--card);color:var(--muted);border:none;border-right:1px solid var(--border);cursor:pointer;white-space:nowrap}
 .rtn-type button:last-child{border-right:none}
 .rtn-type button.on{background:var(--ndim);color:var(--navy)}
+/* ── Superset brackets ── */
+.ss-wrap{position:relative;margin-left:6px;padding-left:10px;border-left:3px solid var(--navy);border-radius:0}
+.ss-wrap .exb:first-child{margin-top:0}.ss-wrap .exb:last-child{margin-bottom:0}
+.ss-lbl{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);padding:2px 8px 4px 10px;margin:0 13px}
+.ss-link-btn{font-size:10px;font-weight:700;color:var(--navy);background:var(--ndim);border:1px solid var(--nbright);border-radius:6px;padding:4px 9px;cursor:pointer;white-space:nowrap}
+.ss-link-btn.linked{background:var(--navy);color:#fff;border-color:var(--navy)}
+.ss-link-btn:active{transform:scale(.95)}
+/* Muscle chip picker (secondary muscle selection) */
+.mchip-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.mchip{font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;transition:all .15s}
+.mchip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.mchip:active{transform:scale(.95)}
+/* Routine editor superset visual */
+.rtn-ss-wrap{border-left:3px solid var(--navy);margin-left:4px;padding-left:6px;border-radius:0}
+.rtn-ss-lbl{font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);padding:3px 0 2px 2px}
+/* Import modal */
+.import-ta{width:100%;min-height:120px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;padding:10px;border:1px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--text);resize:vertical}
+.import-preview{border:1px solid var(--border);border-radius:var(--rm);overflow:hidden;margin:10px 0}
+.import-row{padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.import-row:last-child{border-bottom:none}
+.import-row .ir-name{font-weight:600}.import-row .ir-meta{font-size:10px;color:var(--muted);margin-top:2px}
+.import-warn{font-size:11px;color:var(--gold);background:var(--gdim);border-radius:7px;padding:7px 10px;margin:8px 0}
 .bm-svg{width:100%;height:auto;display:block}
 .bm-rg{cursor:pointer;stroke:var(--card);stroke-width:1;transition:opacity .12s}
 .bm-rg:active{opacity:.55}
@@ -802,6 +824,8 @@ function load(){
   if(S.calMonth==null)S.calMonth=new Date().getMonth();
   // Migrate old macro key names
   if(S.macroGoals.calories&&!S.macroGoals.cals){S.macroGoals.cals=S.macroGoals.calories;delete S.macroGoals.calories;}
+  // Hydrate SEC_MUSCLE from custom exercises
+  (S.custom||[]).forEach(ex=>{if(ex.sec&&ex.sec.length)SEC_MUSCLE[ex.id]=ex.sec;});
   applyDark();applyTheme();
 }
 
@@ -809,6 +833,7 @@ function load(){
 // UTILS
 // ═══════════════════════════════════════════════════
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function today(){return new Date().toISOString().split('T')[0];}
 function fmtDate(iso){if(!iso)return'';return new Date(iso).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
 function fmtShort(iso){if(!iso)return'';return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric'});}
@@ -1632,7 +1657,7 @@ function startWorkout(rid){
   S.activeWorkout={id:uid(),routineId:rid||null,
     name:rid?(S.routines.find(r=>r.id===rid)?.name||'Workout'):`Workout — ${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}`,
     started:Date.now(),exercises:[],notes:'',_origExIds:null,_origProgression:{}};
-  if(rid){const r=S.routines.find(x=>x.id===rid);if(r){S.activeWorkout._origExIds=r.exercises.map(e=>e.exId);r.exercises.forEach(re=>{const fill=getAutoFill(re.exId,rid);const setCount=re.sets>0?re.sets:3;const sets=fill?fill.map(f=>({w:f.w,r:f.r,done:false,tag:''})):Array.from({length:setCount},()=>({w:re.w||'',r:re.r||'',done:false,tag:''}));const prog=re.type||re.progression||'flat';S.activeWorkout._origProgression[re.exId]=prog;S.activeWorkout.exercises.push({exId:re.exId,sets,_af:!!fill,progression:prog,rest:(re.rest!=null?re.rest:null)});});}}
+  if(rid){const r=S.routines.find(x=>x.id===rid);if(r){S.activeWorkout._origExIds=r.exercises.map(e=>e.exId);r.exercises.forEach(re=>{const fill=getAutoFill(re.exId,rid);const setCount=re.sets>0?re.sets:3;const sets=fill?fill.map(f=>({w:f.w,r:f.r,done:false,tag:''})):Array.from({length:setCount},()=>({w:re.w||'',r:re.r||'',done:false,tag:''}));const prog=re.type||re.progression||'flat';S.activeWorkout._origProgression[re.exId]=prog;S.activeWorkout.exercises.push({exId:re.exId,sets,_af:!!fill,progression:prog,rest:(re.rest!=null?re.rest:null),link:re.link||null});});}}
   save();render();startWtTimer();
 }
 function renderSession(c){
@@ -1654,9 +1679,13 @@ function renderSession(c){
   </div>`;
   if(painWs.length)html+=`<div class="pain-banner" style="display:flex;align-items:center;gap:7px">${ICON('⚠',14)} Pain flagged on ${painWs.map(p=>p.name).join(', ')} — proceed carefully</div>`;
   if(!wk.exercises.length)html+=`<div class="empty" style="padding:44px 20px"><div style="margin-bottom:12px;color:var(--muted2)">${ICON('dumbbell',34)}</div><div class="etit">No exercises yet</div><p style="font-size:12px">Tap below to add your first</p></div>`;
+  const _ssG=ssGroups(wk.exercises);
+  const _ssMap={};_ssG.forEach(g=>{for(let k=g.start;k<=g.end;k++)_ssMap[k]=g;});
   wk.exercises.forEach((ex,ei)=>{
     const info=getEx(ex.exId);const pr=S.prs[ex.exId];const lastStr=getLastStr(ex.exId,wk.routineId);
     const painLvl=getExPainLevel(ex.exId);const olSug=checkProgressiveOverload(ex.exId);
+    const inSS=_ssMap[ei];const isSSStart=inSS&&inSS.start===ei;const isSSEnd=inSS&&inSS.end===ei;
+    if(isSSStart){const cnt=inSS.end-inSS.start+1;html+=`<div class="ss-wrap"><div class="ss-lbl">${ssLabel(cnt)}</div>`;}
     html+=`<div class="exb" id="exb-${ei}">
       <div class="exbh">
         <div style="display:flex;align-items:flex-start;justify-content:space-between">
@@ -1668,6 +1697,8 @@ function renderSession(c){
             ${painLvl>=2?`<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:2px">⚠ Pain reported ${painLvl}/3 sessions — lighter load</div>`:''}
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">
+            ${ei>0?`<button class="ib" style="font-size:13px;color:var(--muted)" onclick="moveExInSession(${ei},-1)" title="Move up">↑</button>`:''}
+            ${ei<wk.exercises.length-1?`<button class="ib" style="font-size:13px;color:var(--muted)" onclick="moveExInSession(${ei},1)" title="Move down">↓</button>`:''}
             <button class="ib" style="color:var(--navy);border-color:var(--nbright);font-size:11px;width:auto;padding:0 8px;gap:3px" onclick="showRestPicker('${ex.exId}')" title="Rest timer">${ICON('⏱',13)} ${exRestFor(ex.exId)>=60?`${Math.floor(exRestFor(ex.exId)/60)}:${String(exRestFor(ex.exId)%60).padStart(2,'0')}`:`${exRestFor(ex.exId)}s`}</button>
             <button class="ib" style="color:var(--blue);border-color:rgba(42,111,196,.25);font-size:11px" onclick="showPlateCalc(${ei})" title="Plate calc">${ICON('🔢',15)}</button>
             <button class="ib delbtn" onclick="removeEx(${ei})">✕</button>
@@ -1694,7 +1725,9 @@ function renderSession(c){
       <button class="btn bts bsm" style="flex:1;color:var(--gold);font-weight:600;border-color:rgba(176,120,40,.25)" onclick="addWarmup(${ei})">+ Warmup</button>
       <button class="btn bts bsm" style="flex:1;color:var(--navy);font-weight:600;border-color:rgba(30,53,88,.2)" onclick="addSet(${ei})">+ Set</button>
       <button class="btn bts bsm delbtn" onclick="rmLastSet(${ei})">− Set</button>
+      ${ei<wk.exercises.length-1?`<button class="ss-link-btn${(ex.link&&wk.exercises[ei+1]?.link===ex.link)?' linked':''}" onclick="toggleSessionLink(${ei})">${(ex.link&&wk.exercises[ei+1]?.link===ex.link)?'⛓ Unlink':'⛓ Link ↓'}</button>`:''}
     </div></div>`;
+    if(isSSEnd)html+=`</div>`; // close .ss-wrap
   });
   html+=`<div style="padding:10px 13px 6px;display:flex;gap:9px">
     <button class="btn btp bfw" style="flex:2;padding:13px;border-radius:10px" onclick="showExPicker()">+ Add Exercise</button>
@@ -1767,7 +1800,7 @@ function togSet(ei,si){
   const ri=document.querySelector(`#sr-${ei}-${si} input:nth-of-type(2)`);
   if(wi)s.w=wi.value;if(ri)s.r=ri.value;
   s.done=!s.done;
-  if(s.done){if(!s.warmup)checkPR(S.activeWorkout.exercises[ei].exId,parseFloat(s.w||0),parseInt(s.r||0));startRest(exRestFor(S.activeWorkout.exercises[ei].exId));}
+  if(s.done){if(!s.warmup)checkPR(S.activeWorkout.exercises[ei].exId,parseFloat(s.w||0),parseInt(s.r||0));if(isLastInSuperset(ei))startRest(exRestFor(S.activeWorkout.exercises[ei].exId));}
   save();
   const row=document.getElementById(`sr-${ei}-${si}`);
   if(row){
@@ -1791,7 +1824,25 @@ function checkPR(exId,w,r){if(!w||!r)return;const est=e1rm(w,r);const prev=S.prs
 function addSet(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];const lastWork=[...ex.sets].reverse().find(s=>!s.warmup);ex.sets.push({w:'',r:lastWork?.r||'',done:false,tag:'',warmup:false,_manual:false});recalcExercise(ei);renderSession(document.getElementById('content'));setTimeout(()=>{document.querySelectorAll(`#exb-${ei} .srow`).slice(-1)[0]?.scrollIntoView({behavior:'smooth',block:'nearest'});},60);}
 function addWarmup(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];let idx=0;while(idx<ex.sets.length&&ex.sets[idx].warmup)idx++;ex.sets.splice(idx,0,{w:'',r:'',done:false,tag:'',warmup:true,_manual:false});recalcExercise(ei);renderSession(document.getElementById('content'));}
 function rmLastSet(ei){if(!S.activeWorkout)return;const ex=S.activeWorkout.exercises[ei];if(ex.sets.length>1){ex.sets.pop();save();renderSession(document.getElementById('content'));}}
-function removeEx(ei){if(!S.activeWorkout)return;S.activeWorkout.exercises.splice(ei,1);save();renderSession(document.getElementById('content'));}
+function removeEx(ei){if(!S.activeWorkout)return;S.activeWorkout.exercises.splice(ei,1);cleanSessionLinks();save();renderSession(document.getElementById('content'));}
+function moveExInSession(ei,dir){
+  if(!S.activeWorkout)return;
+  const arr=S.activeWorkout.exercises;const j=ei+dir;
+  if(j<0||j>=arr.length)return;
+  [arr[ei],arr[j]]=[arr[j],arr[ei]];
+  cleanSessionLinks();save();renderSession(document.getElementById('content'));
+  setTimeout(()=>{document.getElementById(`exb-${j}`)?.scrollIntoView({behavior:'smooth',block:'nearest'});},60);
+}
+function cleanSessionLinks(){
+  if(!S.activeWorkout)return;
+  const arr=S.activeWorkout.exercises;
+  arr.forEach((ex,i)=>{
+    if(!ex.link)return;
+    const prev=i>0&&arr[i-1].link===ex.link;
+    const next=i<arr.length-1&&arr[i+1].link===ex.link;
+    if(!prev&&!next)ex.link=null;
+  });
+}
 function confirmCancel(){customConfirm('This workout will not be saved.','Discard workout',()=>{S.activeWorkout=null;if(wtInt)clearInterval(wtInt);skipRest();save();render();});}
 // ─── Plate Calc ───
 function showPlateCalc(ei){
@@ -1965,7 +2016,7 @@ function renderHistList(){
 }
 function showWkDetail(id){
   const wk=S.workouts.find(w=>w.id===id);if(!wk)return;
-  let exHtml='';wk.exercises.forEach(ex=>{const info=getEx(ex.exId);const done=ex.sets.filter(s=>s.done);exHtml+=`<div class="wsr"><div style="flex:1"><div style="font-size:13px;font-weight:600">${info?.name||'?'}</div>${done.map(s=>`<div class="mono" style="font-size:10px;color:var(--muted)">${s.w?s.w+'×':''}${s.r||0}${s.tag?` [${s.tag}]`:''}</div>`).join('')}</div><div class="mono" style="font-size:11px;color:var(--muted)">${done.length} sets</div></div>`;});
+  let exHtml='';const _hssG=ssGroups(wk.exercises);const _hssM={};_hssG.forEach(g=>{for(let k=g.start;k<=g.end;k++)_hssM[k]=g;});wk.exercises.forEach((ex,exi)=>{const info=getEx(ex.exId);const done=ex.sets.filter(s=>s.done);const inSS=_hssM[exi];const isStart=inSS&&inSS.start===exi;const isEnd=inSS&&inSS.end===exi;if(isStart){const cnt=inSS.end-inSS.start+1;exHtml+=`<div style="border-left:3px solid var(--navy);padding-left:8px;margin:4px 0"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);margin-bottom:2px">${ssLabel(cnt)}</div>`;}exHtml+=`<div class="wsr"><div style="flex:1"><div style="font-size:13px;font-weight:600">${info?.name||'?'}</div>${done.map(s=>`<div class="mono" style="font-size:10px;color:var(--muted)">${s.w?s.w+'×':''}${s.r||0}${s.tag?` [${s.tag}]`:''}</div>`).join('')}</div><div class="mono" style="font-size:11px;color:var(--muted)">${done.length} sets</div></div>`;if(isEnd)exHtml+=`</div>`;});
   const ov=makeOv('wk-ov');
   ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">${wk.name}</div>
     <div class="sgrid" style="border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-bottom:13px">
@@ -2782,12 +2833,14 @@ function showExDetail(exId){
 }
 function delCustomEx(id){customConfirm('Delete this exercise?','Delete',()=>{S.custom=S.custom.filter(c=>c.id!==id);save();document.getElementById('exd-ov')?.remove();renderLibrary(document.getElementById('content'));});}
 function showCustomEx(){
+  const muscles=Object.keys(MEV_MAV);
   const ov=makeOv('cex-ov');
   ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">Custom Exercise</div>
     <div class="fg"><label class="fl">Name</label><input type="text" id="cex-n" placeholder="e.g. Z-Press"></div>
     <div class="fg"><label class="fl">Category</label><select id="cex-c">${CATS.filter(c=>c!=='All').map(c=>`<option>${c}</option>`).join('')}</select></div>
     <div class="fg"><label class="fl">Equipment</label><select id="cex-e"><option>Barbell</option><option>Dumbbell</option><option>Kettlebell</option><option>Machine</option><option>Cable</option><option>Bodyweight</option><option>Other</option></select></div>
-    <div class="fg"><label class="fl">Primary Muscle</label><select id="cex-m">${Object.keys(MEV_MAV).map(m=>`<option>${m}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Primary Muscle</label><select id="cex-m">${muscles.map(m=>`<option>${m}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Secondary Muscles</label><div class="mchip-grid" id="cex-sec">${muscles.map(m=>`<div class="mchip" data-m="${m}" onclick="this.classList.toggle('on')">${m}</div>`).join('')}</div></div>
     <button class="btn btp bfw" onclick="saveCustomEx()">Add Exercise</button>
     <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('cex-ov'))">Cancel</button>
   </div>`;
@@ -2796,11 +2849,15 @@ function showCustomEx(){
 function saveCustomEx(){
   const name=document.getElementById('cex-n')?.value?.trim();if(!name){toast('Enter a name');return;}
   if(!S.custom)S.custom=[];
-  S.custom.push({id:`custom-${uid()}`,name,cat:document.getElementById('cex-c')?.value||'Other',eq:document.getElementById('cex-e')?.value||'Other',muscle:document.getElementById('cex-m')?.value||''});
+  const id=`custom-${uid()}`;
+  const muscle=document.getElementById('cex-m')?.value||'';
+  const secs=[...document.querySelectorAll('#cex-sec .mchip.on')].map(el=>el.dataset.m).filter(m=>m!==muscle);
+  S.custom.push({id,name,cat:document.getElementById('cex-c')?.value||'Other',eq:document.getElementById('cex-e')?.value||'Other',muscle,sec:secs});
+  if(secs.length)SEC_MUSCLE[id]=secs;
   save();dismissOv(document.getElementById('cex-ov'));toast('Added','green');renderLibrary(document.getElementById('content'));
 }
 function renderLibRoutines(){
-  let html=`<div style="padding:9px 13px;display:flex;justify-content:flex-end"><button class="btn btp bsm" onclick="showCreateRoutine()">+ New Routine</button></div>`;
+  let html=`<div style="padding:9px 13px;display:flex;justify-content:flex-end;gap:8px"><button class="btn bts bsm" onclick="showImportUI()">📥 Import</button><button class="btn btp bsm" onclick="showCreateRoutine()">+ New Routine</button></div>`;
   if(!S.routines?.length)return html+`<div class="empty"><div style="margin-bottom:12px;color:var(--muted2)">${ICON('dumbbell',34)}</div><div class="etit">No routines yet</div><p style="font-size:12px">Build your first routine to get started</p></div>`;
   const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const active=S.routines.filter(r=>r.active!==false);
@@ -3000,6 +3057,226 @@ function setGroupCursor(gid,i){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)
 function toggleGroupDay(gid,rid,dow){const g=(S.groups||[]).find(x=>x.id===gid);if(!g)return;if(!g.dayMap)g.dayMap={};if(!g.dayMap[rid])g.dayMap[rid]=[];const arr=g.dayMap[rid];const idx=arr.indexOf(dow);if(idx>=0)arr.splice(idx,1);else arr.push(dow);save();reopenGroup(gid);}
 function deleteGroup(gid){customConfirm('Delete this group? Your routines are kept.','Delete',()=>{S.groups=(S.groups||[]).filter(g=>g.id!==gid);save();document.getElementById('gd-ov')?.remove();S.libTab='groups';renderLibrary(document.getElementById('content'));});}
 
+// ═══════════════════════════════════════════════════
+// IMPORT PROGRAM
+// ═══════════════════════════════════════════════════
+function showImportUI(){
+  const ov=makeOv('import-ov');
+  ov.innerHTML=`<div class="modal" style="max-height:92vh"><div class="mh"></div><div class="mt">Import Program</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Paste the JSON generated by an LLM (ChatGPT, Claude, etc.) using the Lah We import SOP. It will create routines and optionally a group.</div>
+    <textarea id="import-json" class="import-ta" placeholder='Paste JSON here…'></textarea>
+    <div id="import-preview-area"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btp bfw" id="import-go-btn" onclick="doImport()" disabled>Import</button>
+      <button class="btn btg" style="padding:11px 16px" onclick="dismissOv(document.getElementById('import-ov'))">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  document.getElementById('import-json').addEventListener('input',previewImport);
+}
+function previewImport(){
+  const raw=document.getElementById('import-json')?.value?.trim();
+  const area=document.getElementById('import-preview-area');
+  const btn=document.getElementById('import-go-btn');
+  if(!area)return;
+  if(!raw){area.innerHTML='';if(btn)btn.disabled=true;return;}
+  let d;
+  try{d=JSON.parse(raw);}catch(e){area.innerHTML=`<div class="import-warn">Invalid JSON: ${esc(e.message)}</div>`;if(btn)btn.disabled=true;return;}
+  try{
+    const parsed=parseImport(d);
+    if(parsed.error){area.innerHTML=`<div class="import-warn">${parsed.error}</div>`;if(btn)btn.disabled=true;return;}
+    let html='';
+    (parsed.groups||[]).forEach(g=>{
+      html+=`<div class="import-row"><div class="ir-name">📁 Group: ${esc(g.name)}</div><div class="ir-meta">Mode: ${g.mode||'rotation'} · ${g.routineCount} routines</div></div>`;
+    });
+    parsed.routines.forEach(r=>{
+      const exCount=r.exercises.length;
+      const ssCount=new Set(r.exercises.filter(e=>e.link).map(e=>e.link)).size;
+      const newCount=r.exercises.filter(e=>e._isNew).length;
+      const matchCount=exCount-newCount;
+      html+=`<div class="import-row"><div class="ir-name">${esc(r.name)}</div><div class="ir-meta">${exCount} exercises · ${matchCount} matched · ${newCount} new custom${ssCount?` · ${ssCount} superset${ssCount>1?'s':''}`:''}</div></div>`;
+    });
+    if(parsed.warnings.length)html+=`<div class="import-warn">${parsed.warnings.join('<br>')}</div>`;
+    area.innerHTML=`<div class="import-preview">${html}</div>`;
+    if(btn)btn.disabled=false;
+    window._importParsed=parsed;
+  }catch(e){area.innerHTML=`<div class="import-warn">Import error: ${esc(e.message)}</div>`;if(btn)btn.disabled=true;}
+}
+function parseImport(d){
+  const warnings=[];
+  // Fix #3: Support both {group, routines} and {groups: [{name, mode, routines}]}
+  let groupDefs=[];let allRoutines=[];
+  if(d.groups&&Array.isArray(d.groups)){
+    d.groups.forEach(g=>{
+      const rStart=allRoutines.length;
+      const rtns=(g.routines||[]).map(r=>parseRoutine(r,warnings));
+      allRoutines.push(...rtns);
+      groupDefs.push({name:g.name||'Imported Group',mode:g.mode||'rotation',routineCount:rtns.length,_start:rStart,_count:rtns.length});
+    });
+  }else if(d.routines&&Array.isArray(d.routines)){
+    allRoutines=d.routines.map(r=>parseRoutine(r,warnings));
+    if(d.group)groupDefs.push({name:d.group.name||'Imported Group',mode:d.group.mode||'rotation',routineCount:allRoutines.length,_start:0,_count:allRoutines.length});
+  }else{return{error:'JSON must have "routines" or "groups" array.'};}
+  if(!allRoutines.length)return{error:'No routines found.'};
+  return{routines:allRoutines,groups:groupDefs,warnings};
+}
+function parseRoutine(r,warnings){
+  if(!r.name)r.name='Imported Routine';
+  const exercises=(r.exercises||[]).map(e=>{
+    const matched=matchExercise(e.name||e.id||'');
+    let exId;let isNew=false;
+    if(matched){exId=matched.id;}
+    else{
+      exId=`custom-${uid()}`;isNew=true;
+      const cat=guessCat(e.name||'');const eq=guessEq(e.equipment||e.eq||'');const muscle=e.muscle||guessMuscle(cat);
+      if(!S.custom)S.custom=[];
+      const secs=(e.secondaryMuscles||[]).filter(m=>MEV_MAV[m]&&m!==muscle);
+      S.custom.push({id:exId,name:e.name||'Unknown',cat,eq,muscle,sec:secs});
+      if(secs.length)SEC_MUSCLE[exId]=secs;
+      warnings.push(`"${esc(e.name||'?')}" → new custom`);
+    }
+    return{exId,sets:parseInt(e.sets)||3,w:e.weight||'',r:String(e.reps||''),type:e.type||'flat',rest:e.rest!=null?parseInt(e.rest):null,link:e.link||null,_isNew:isNew};
+  });
+  return{name:r.name,notes:r.notes||'',exercises};
+}
+// Fix #2: Score-based matching, no greedy contains
+function matchExercise(name){
+  if(!name)return null;
+  const lower=name.toLowerCase().trim();
+  const all=allEx();
+  // 1. Exact name match
+  let m=all.find(e=>e.name.toLowerCase()===lower);if(m)return m;
+  // 2. Exact id match
+  m=all.find(e=>e.id===lower);if(m)return m;
+  // 3. Score-based: tokenize, compute overlap ratio, require high precision
+  const stops=new Set(['the','and','with','for','set','on','of','to','in','a','w']);
+  const inToks=lower.split(/[\s\-_\/\(\)]+/).filter(t=>t.length>1&&!stops.has(t));
+  if(!inToks.length)return null;
+  let best=null,bestScore=0;
+  all.forEach(e=>{
+    const eToks=e.name.toLowerCase().split(/[\s\-_\/\(\)]+/).filter(t=>t.length>1&&!stops.has(t));
+    if(!eToks.length)return;
+    // How many catalog tokens appear in input (forward match)
+    const fwd=eToks.filter(ct=>inToks.some(it=>it===ct)).length;
+    const fwdRatio=fwd/eToks.length;
+    // Length similarity bonus
+    const lenRatio=Math.min(inToks.length,eToks.length)/Math.max(inToks.length,eToks.length);
+    // Require ALL catalog tokens present in input
+    if(fwdRatio<1)return;
+    // Score favors similar-length names (penalizes "Leg Curl" matching "Seated Leg Curl")
+    const score=fwdRatio*0.6+lenRatio*0.4;
+    if(score>bestScore){bestScore=score;best=e;}
+  });
+  // Require length ratio ≥ 0.5 to avoid "Leg Curl" matching "Seated Lying Leg Curl Machine"
+  if(best&&bestScore>=0.9)return best;
+  return null;
+}
+function guessCat(name){
+  const n=name.toLowerCase();
+  if(/bench|chest|fly|push.?up|pec/i.test(n))return'Chest';
+  if(/row|pull|lat|back|deadlift/i.test(n))return'Back';
+  if(/shoulder|press|lateral|ohp|delt|raise/i.test(n))return'Shoulders';
+  if(/curl|bicep/i.test(n))return'Biceps';
+  if(/tricep|skull|pushdown|extension/i.test(n))return'Triceps';
+  if(/squat|leg|lunge|calf|ham|glute|rdl|hip/i.test(n))return'Legs';
+  if(/crunch|plank|ab|core|russian|sit.?up/i.test(n))return'Core';
+  return'Full Body';
+}
+function guessEq(eq){
+  const map={'barbell':'Barbell','dumbbell':'Dumbbell','db':'Dumbbell','cable':'Cable','machine':'Machine','bodyweight':'Bodyweight','bw':'Bodyweight','kettlebell':'Kettlebell','kb':'Kettlebell','band':'Other','smith':'Machine'};
+  return map[(eq||'').toLowerCase()]||'Other';
+}
+function guessMuscle(cat){
+  const map={'Chest':'Chest','Back':'Lats','Shoulders':'Shoulders','Biceps':'Biceps','Triceps':'Triceps','Legs':'Quads','Core':'Abs','Full Body':'Quads'};
+  return map[cat]||'Quads';
+}
+// Fix #3: doImport supports multi-group
+function doImport(){
+  const parsed=window._importParsed;if(!parsed)return;
+  if(!S.routines)S.routines=[];if(!S.groups)S.groups=[];
+  const allRids=[];
+  parsed.routines.forEach(r=>{
+    const rid=uid();
+    // Strip _isNew flags before storing
+    const cleanEx=r.exercises.map(e=>{const c={...e};delete c._isNew;return c;});
+    S.routines.push({id:rid,name:r.name,notes:r.notes,exercises:cleanEx,days:[]});
+    allRids.push(rid);
+  });
+  parsed.groups.forEach(g=>{
+    const gid=uid();
+    const routineIds=allRids.slice(g._start,g._start+g._count);
+    S.groups.push({id:gid,name:g.name,mode:g.mode,routineIds,cursor:0,dayMap:{},daysPerWeek:routineIds.length,active:!getActiveGroup()});
+  });
+  save();
+  dismissOv(document.getElementById('import-ov'));
+  const gCount=parsed.groups.length;
+  const msg=`Imported ${parsed.routines.length} routine${parsed.routines.length>1?'s':''}${gCount?` + ${gCount} group${gCount>1?'s':''}`:''}`; 
+  toast(msg,'green');
+  S.libTab='routines';renderLibrary(document.getElementById('content'));
+}
+
+// ═══════════════════════════════════════════════════
+// SUPERSET LINKING
+// ═══════════════════════════════════════════════════
+function ssLabel(count){return count===2?'Superset':count===3?'Triset':'Giant Set';}
+// Get superset groups from an exercise array as [{link,start,end}]
+function ssGroups(exercises){
+  const groups=[];let i=0;
+  while(i<exercises.length){
+    const lk=exercises[i].link;
+    if(lk){
+      let j=i+1;while(j<exercises.length&&exercises[j].link===lk)j++;
+      if(j-i>=2)groups.push({link:lk,start:i,end:j-1});
+      i=j;
+    }else{i++;}
+  }
+  return groups;
+}
+// Toggle link between exercise i and i+1 in a routine
+function toggleRtnLink(rid,i){
+  const L=rtnList(rid);if(!L)return;
+  const arr=L.arr;if(i>=arr.length-1)return;
+  const a=arr[i],b=arr[i+1];
+  if(a.link&&a.link===b.link){
+    // Unlink: if group has >2 members, only remove a from the group
+    const members=arr.filter(e=>e.link===a.link);
+    if(members.length>2){a.link=null;}
+    else{a.link=null;b.link=null;}
+  }else{
+    // Link: if b already has a link, join that group; else if a has a link, extend; else new
+    if(b.link){a.link=b.link;}
+    else if(a.link){b.link=a.link;}
+    else{const lk='ss-'+uid();a.link=lk;b.link=lk;}
+  }
+  if(L.persist)save();rtnRerender(rid);
+}
+// Toggle link between exercise ei and ei+1 in active workout
+function toggleSessionLink(ei){
+  if(!S.activeWorkout)return;
+  const arr=S.activeWorkout.exercises;if(ei>=arr.length-1)return;
+  const a=arr[ei],b=arr[ei+1];
+  if(a.link&&a.link===b.link){
+    const members=arr.filter(e=>e.link===a.link);
+    if(members.length>2){a.link=null;}
+    else{a.link=null;b.link=null;}
+  }else{
+    if(b.link){a.link=b.link;}
+    else if(a.link){b.link=a.link;}
+    else{const lk='ss-'+uid();a.link=lk;b.link=lk;}
+  }
+  save();renderSession(document.getElementById('content'));
+}
+// Check if exercise at index ei is the last in its superset group
+function isLastInSuperset(ei){
+  if(!S.activeWorkout)return true;
+  const arr=S.activeWorkout.exercises;
+  const lk=arr[ei]?.link;if(!lk)return true;
+  // Find the last exercise in this link group
+  let lastIdx=ei;
+  for(let j=ei+1;j<arr.length;j++){if(arr[j].link===lk)lastIdx=j;else break;}
+  return ei===lastIdx;
+}
+
 function renderLibEquipment(){
   const cur=S.equipPreset||'full';
   let html=`<div style="padding:10px 13px 4px"><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Select what's available at your gym to filter exercises throughout the app.</div>
@@ -3024,10 +3301,12 @@ function rtnList(rid){
 }
 const RTN_TYPES=[['flat','Straight'],['ascend','Pyramid'],['descend','Drop']];
 function fmtRest(v){const s=(v==null?(S.restDur||90):v);return s>=60?`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`:`${s}s`;}
-function rtnRowHTML(e,i,rid,draggable){
+function rtnRowHTML(e,i,rid,draggable,isLast){
   const ex=getEx(e.exId);
   const sets=e.sets==null?3:e.sets;
   const type=e.type||'flat';
+  const L=rtnList(rid);const arr=L?L.arr:[];
+  const nextLinked=!isLast&&arr[i+1]&&e.link&&arr[i+1].link===e.link;
   return `<div class="rtn-ex rd-ex-row" data-idx="${i}">
     <div style="display:flex;align-items:center;gap:8px">
       ${draggable?`<div class="drag-handle" data-drag="${i}" style="cursor:grab">⣿</div>`:''}
@@ -3052,14 +3331,26 @@ function rtnRowHTML(e,i,rid,draggable){
         <div class="rtn-type">${RTN_TYPES.map(([v,lbl])=>`<button class="${type===v?'on':''}" onclick="rtnType('${rid}',${i},'${v}')">${lbl}</button>`).join('')}</div>
       </div>
     </div>
+    ${!isLast?`<div style="text-align:right;margin-top:6px"><button class="ss-link-btn${nextLinked?' linked':''}" onclick="toggleRtnLink('${rid}',${i})">${nextLinked?'⛓ Unlink':'⛓ Link ↓'}</button></div>`:''}
   </div>`;
 }
 function rtnRerender(rid){
   const L=rtnList(rid);if(!L)return;
   const draft=!L.persist;
   const cont=document.getElementById(draft?`r-exs-${rid}`:'rd-ex-list');
-  if(cont)cont.innerHTML=L.arr.length?L.arr.map((e,i)=>rtnRowHTML(e,i,rid,!draft)).join(''):(draft?'':'<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">No exercises</div></div>');
+  if(!cont)return;
+  if(!L.arr.length){cont.innerHTML=draft?'':'<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">No exercises</div></div>';return;}
+  const groups=ssGroups(L.arr);const ssMap={};groups.forEach(g=>{for(let k=g.start;k<=g.end;k++)ssMap[k]=g;});
+  let html='';
+  L.arr.forEach((e,i)=>{
+    const inSS=ssMap[i];const isStart=inSS&&inSS.start===i;const isEnd=inSS&&inSS.end===i;
+    if(isStart){const cnt=inSS.end-inSS.start+1;html+=`<div class="rtn-ss-wrap"><div class="rtn-ss-lbl">${ssLabel(cnt)}</div>`;}
+    html+=rtnRowHTML(e,i,rid,!draft,i===L.arr.length-1);
+    if(isEnd)html+=`</div>`;
+  });
+  cont.innerHTML=html;
   if(draft){const cnt=document.getElementById('r-exs-count');if(cnt)cnt.textContent=L.arr.length;}
+  if(!draft)attachRoutineDrag(rid);
 }
 function rtnAdjSets(rid,i,d){const L=rtnList(rid);if(!L||!L.arr[i])return;const e=L.arr[i];e.sets=Math.max(0,(e.sets==null?3:e.sets)+d);if(L.persist)save();rtnRerender(rid);}
 function rtnReps(rid,i,v){const L=rtnList(rid);if(!L||!L.arr[i])return;L.arr[i].r=v;if(L.persist)save();}
@@ -3118,7 +3409,15 @@ function showRoutineDetail(rid){
   const ov=makeOv('rd-ov');
   function renderExList(){
     if(!r.exercises||!r.exercises.length)return '<div class="empty" style="padding:20px"><div class="etit" style="font-size:13px">No exercises</div></div>';
-    return r.exercises.map((re,i)=>rtnRowHTML(re,i,rid,true)).join('');
+    const groups=ssGroups(r.exercises);const ssMap={};groups.forEach(g=>{for(let k=g.start;k<=g.end;k++)ssMap[k]=g;});
+    let html='';
+    r.exercises.forEach((re,i)=>{
+      const inSS=ssMap[i];const isStart=inSS&&inSS.start===i;const isEnd=inSS&&inSS.end===i;
+      if(isStart){const cnt=inSS.end-inSS.start+1;html+=`<div class="rtn-ss-wrap"><div class="rtn-ss-lbl">${ssLabel(cnt)}</div>`;}
+      html+=rtnRowHTML(re,i,rid,true,i===r.exercises.length-1);
+      if(isEnd)html+=`</div>`;
+    });
+    return html;
   }
   ov.innerHTML=`<div class="modal"><div class="mh"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
