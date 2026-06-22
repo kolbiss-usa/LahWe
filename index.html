@@ -209,6 +209,11 @@ textarea{resize:none;line-height:1.6}
   background:var(--bg);color:var(--muted);font-size:11px;font-weight:700;
   letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .1s;touch-action:manipulation}
 .chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+/* ── BARCODE SCANNER ── */
+#scan-reader video{border-radius:12px;object-fit:cover}
+#scan-reader img[alt="Info icon"]{display:none!important}
+#scan-reader{position:relative}
+#qr-shaded-region{border-color:var(--navy)!important}
 .ptabs{display:flex;border-bottom:1px solid var(--border);padding:0 14px;overflow-x:auto;scrollbar-width:none}
 .ptabs::-webkit-scrollbar{display:none}
 .ptab{flex-shrink:0;padding:11px 12px;font-size:11px;font-weight:700;letter-spacing:.06em;
@@ -818,6 +823,7 @@ function load(){
   if(!S.schedule.overrides)S.schedule.overrides={};
   if(!S.schedule.routineOverrides)S.schedule.routineOverrides={};
   if(!S.meals)S.meals=[];
+  if(!S.foodCache)S.foodCache={};
   if(S.activeCardDeck===undefined)S.activeCardDeck=null;
   if(S.activeSprintTimer===undefined)S.activeSprintTimer=null;
   if(S.calYear==null)S.calYear=new Date().getFullYear();
@@ -2728,6 +2734,9 @@ function showAddMeal(ds){
       </div>
       <input type="text" id="meal-name" placeholder="Or enter custom name" style="margin-top:2px">
     </div>
+    <div style="margin-bottom:12px">
+      <button class="btn bts bfw" onclick="showBarcodeScanner()" style="gap:8px"><span style="font-size:16px">📷</span> Scan Barcode</button>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
       <div class="fg" style="margin-bottom:0"><label class="fl">Protein (g)</label><input type="number" inputmode="decimal" id="meal-pro" placeholder="0" oninput="autoCalcMeal()"></div>
       <div class="fg" style="margin-bottom:0"><label class="fl">Carbs (g)</label><input type="number" inputmode="decimal" id="meal-carb" placeholder="0" oninput="autoCalcMeal()"></div>
@@ -2776,6 +2785,222 @@ function deleteMeal(id){
     S.meals=(S.meals||[]).filter(m=>m.id!==id);
     save();renderNutrition(document.getElementById('content'));
   });
+}
+// ═══════════════════════════════════════════════════
+// BARCODE SCANNER + OPEN FOOD FACTS
+// ═══════════════════════════════════════════════════
+let _scanLibLoaded=false,_html5Qr=null;
+function loadScannerLib(){
+  return new Promise((resolve,reject)=>{
+    if(_scanLibLoaded){resolve();return;}
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload=()=>{_scanLibLoaded=true;resolve();};
+    s.onerror=()=>reject(new Error('Failed to load scanner library'));
+    document.head.appendChild(s);
+  });
+}
+function showBarcodeScanner(){
+  // Capture context from meal modal if open
+  const MEAL_TYPES=['Breakfast','Lunch','Dinner','Snack','Pre-workout','Post-workout','Other'];
+  window._scanMealDate=document.getElementById('meal-date')?.value||today();
+  window._scanMealTypeName=MEAL_TYPES[window._mealType||0]||'Snack';
+  const mealOv=document.getElementById('meal-ov');
+  if(mealOv)dismissOv(mealOv);
+  const ov=makeOv('scan-ov');
+  ov.innerHTML=`<div class="modal" style="max-height:96vh;padding-bottom:calc(30px + var(--sb))">
+    <div class="mh"></div>
+    <div class="mt">Scan Barcode</div>
+    <div id="scan-reader" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px"></div>
+    <div id="scan-status" style="text-align:center;padding:12px;font-size:13px;color:var(--muted)">
+      Loading camera…
+    </div>
+    <div style="margin-top:4px;display:flex;gap:8px">
+      <button class="btn bts" style="flex:1" onclick="showManualBarcode()">Enter code</button>
+      <button class="btn btg" style="flex:1" onclick="stopScanner()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  startScanner();
+}
+async function startScanner(){
+  const statusEl=document.getElementById('scan-status');
+  try{
+    await loadScannerLib();
+    _html5Qr=new Html5Qrcode('scan-reader');
+    if(statusEl)statusEl.textContent='Point camera at a barcode…';
+    await _html5Qr.start(
+      {facingMode:'environment'},
+      {fps:10,qrbox:{width:250,height:120},aspectRatio:1.333},
+      onBarcodeDetected,
+      ()=>{}
+    );
+  }catch(e){
+    console.error('Scanner error:',e);
+    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">Camera unavailable — try entering the code manually</div>';
+  }
+}
+function stopScanner(){
+  if(_html5Qr){_html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  const ov=document.getElementById('scan-ov');
+  if(ov)dismissOv(ov);
+}
+function showManualBarcode(){
+  const statusEl=document.getElementById('scan-status');
+  if(!statusEl)return;
+  statusEl.innerHTML=`<div style="display:flex;gap:8px;margin-top:4px">
+    <input type="text" id="manual-barcode" inputmode="numeric" placeholder="Enter barcode number" style="flex:1;font-size:15px">
+    <button class="btn btp bsm" onclick="submitManualBarcode()">Look up</button>
+  </div>`;
+  if(_html5Qr){_html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  setTimeout(()=>document.getElementById('manual-barcode')?.focus(),100);
+}
+function submitManualBarcode(){
+  const code=document.getElementById('manual-barcode')?.value?.trim();
+  if(!code){toast('Enter a barcode number');return;}
+  onBarcodeDetected(code);
+}
+async function onBarcodeDetected(barcode){
+  if(_html5Qr){await _html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  const statusEl=document.getElementById('scan-status');
+  if(statusEl)statusEl.innerHTML=`<div style="font-weight:600;color:var(--navy)">Found: ${barcode}</div><div style="margin-top:4px;font-size:12px">Looking up product…</div>`;
+  // Check cache
+  if(!S.foodCache)S.foodCache={};
+  if(S.foodCache[barcode]){showServingPicker(S.foodCache[barcode],barcode);return;}
+  // Open Food Facts lookup
+  try{
+    const res=await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+    const data=await res.json();
+    if(data.status===1&&data.product){
+      const pr=data.product;const n=pr.nutriments||{};
+      const product={
+        name:pr.product_name||'Unknown Product',
+        brand:pr.brands||'',
+        serving:pr.serving_size||'',
+        servingG:parseFloat(pr.serving_quantity)||0,
+        per100:{
+          protein:Math.round((n.proteins_100g||0)*10)/10,
+          carbs:Math.round((n.carbohydrates_100g||0)*10)/10,
+          fat:Math.round((n.fat_100g||0)*10)/10,
+          cals:Math.round(n['energy-kcal_100g']||0)
+        },
+        perServing:{
+          protein:Math.round((n.proteins_serving||0)*10)/10,
+          carbs:Math.round((n.carbohydrates_serving||0)*10)/10,
+          fat:Math.round((n.fat_serving||0)*10)/10,
+          cals:Math.round(n['energy-kcal_serving']||0)
+        }
+      };
+      S.foodCache[barcode]=product;save();
+      showServingPicker(product,barcode);
+    }else{
+      if(statusEl)statusEl.innerHTML=`<div style="color:var(--red);font-weight:600">Product not found</div><div style="font-size:12px;margin-top:4px;color:var(--muted)">Barcode: ${barcode}<br>Not in Open Food Facts — enter macros manually</div>`;
+    }
+  }catch(e){
+    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">Network error — check connection</div>';
+  }
+}
+function showServingPicker(product){
+  const scanOv=document.getElementById('scan-ov');
+  if(scanOv)dismissOv(scanOv);
+  const ov=makeOv('serving-ov');
+  const hasServing=product.servingG>0||(product.perServing.cals>0);
+  const servingLabel=product.serving||(product.servingG?product.servingG+'g':'');
+  window._scanProduct=product;window._scanMode=hasServing?'serving':'100g';
+  ov.innerHTML=`<div class="modal"><div class="mh"></div>
+    <div style="margin-bottom:14px">
+      <div class="mt" style="margin-bottom:2px">${product.name}</div>
+      ${product.brand?`<div style="font-size:12px;color:var(--muted);margin-top:-12px;margin-bottom:4px">${product.brand}</div>`:''}
+    </div>
+    <div class="fg"><label class="fl">Serving Size</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${hasServing?`<button class="chip on" id="sv-serving" onclick="scanServingMode('serving')">1 serving${servingLabel?' ('+servingLabel+')':''}</button>`:''}
+        <button class="chip${hasServing?'':' on'}" id="sv-100g" onclick="scanServingMode('100g')">100g</button>
+        <button class="chip" id="sv-custom" onclick="scanServingMode('custom')">Custom grams</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">How many</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn bts bsm" onclick="scanQtyAdj(-0.5)" style="width:40px;font-size:16px;font-weight:700">−</button>
+        <input type="number" inputmode="decimal" id="scan-qty" value="1" min="0.1" step="0.5"
+          style="text-align:center;width:70px;font-size:18px;font-weight:600" oninput="updateScanMacros()">
+        <button class="btn bts bsm" onclick="scanQtyAdj(0.5)" style="width:40px;font-size:16px;font-weight:700">+</button>
+      </div>
+    </div>
+    <div id="scan-custom-g" style="display:none" class="fg">
+      <label class="fl">Grams</label>
+      <input type="number" inputmode="decimal" id="scan-grams" placeholder="Enter weight in grams" oninput="updateScanMacros()">
+    </div>
+    <div id="scan-macros" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0 16px;padding:14px;background:var(--bg);border-radius:12px"></div>
+    <button class="btn btp bfw" onclick="addScannedMeal()">Add to Meal Log</button>
+    <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('serving-ov'))">Cancel</button>
+  </div>`;
+  document.body.appendChild(ov);attachSwipeDown(ov);
+  updateScanMacros();
+}
+function scanServingMode(mode){
+  window._scanMode=mode;
+  document.querySelectorAll('#serving-ov .chip').forEach(c=>c.classList.remove('on'));
+  const el=document.getElementById('sv-'+mode);if(el)el.classList.add('on');
+  const cg=document.getElementById('scan-custom-g');
+  if(cg)cg.style.display=mode==='custom'?'block':'none';
+  const qtyRow=document.getElementById('scan-qty')?.parentNode?.parentNode;
+  if(qtyRow)qtyRow.style.display=mode==='custom'?'none':'block';
+  updateScanMacros();
+}
+function scanQtyAdj(d){
+  const el=document.getElementById('scan-qty');if(!el)return;
+  el.value=Math.max(0.5,Math.round(((parseFloat(el.value)||1)+d)*10)/10);
+  updateScanMacros();
+}
+function calcScanMacros(){
+  const p=window._scanProduct;if(!p)return null;
+  const mode=window._scanMode;
+  const qty=parseFloat(document.getElementById('scan-qty')?.value)||1;
+  let base;
+  if(mode==='serving'){
+    base=p.perServing;
+    // If perServing is empty but we have servingG, derive from per100
+    if((!base.cals&&!base.protein)&&p.servingG&&p.per100.cals){
+      const mult=p.servingG/100;
+      base={protein:p.per100.protein*mult,carbs:p.per100.carbs*mult,fat:p.per100.fat*mult,cals:p.per100.cals*mult};
+    }
+    return{protein:r1(base.protein*qty),carbs:r1(base.carbs*qty),fat:r1(base.fat*qty),cals:Math.round(base.cals*qty)};
+  }else if(mode==='custom'){
+    const g=parseFloat(document.getElementById('scan-grams')?.value)||0;
+    const mult=g/100;
+    return{protein:r1(p.per100.protein*mult),carbs:r1(p.per100.carbs*mult),fat:r1(p.per100.fat*mult),cals:Math.round(p.per100.cals*mult)};
+  }else{ // 100g
+    return{protein:r1(p.per100.protein*qty),carbs:r1(p.per100.carbs*qty),fat:r1(p.per100.fat*qty),cals:Math.round(p.per100.cals*qty)};
+  }
+}
+function r1(v){return Math.round(v*10)/10;}
+function updateScanMacros(){
+  const m=calcScanMacros();if(!m)return;
+  window._scanMacros=m;
+  const el=document.getElementById('scan-macros');if(!el)return;
+  el.innerHTML=`
+    <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Protein</div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--navy)">${m.protein}<span style="font-size:10px;opacity:.5">g</span></div></div>
+    <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Carbs</div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--gold)">${m.carbs}<span style="font-size:10px;opacity:.5">g</span></div></div>
+    <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Fat</div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--red)">${m.fat}<span style="font-size:10px;opacity:.5">g</span></div></div>
+    <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Calories</div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--green)">${m.cals}<span style="font-size:10px;opacity:.5">kcal</span></div></div>`;
+}
+function addScannedMeal(){
+  const p=window._scanProduct,m=window._scanMacros;
+  if(!p||!m){toast('No product data');return;}
+  if(!m.protein&&!m.carbs&&!m.fat&&!m.cals){toast('No nutrition data for this product');return;}
+  if(!S.meals)S.meals=[];
+  const name=p.brand?`${p.name} (${p.brand})`:p.name;
+  const date=window._scanMealDate||today();
+  S.meals.push({id:uid(),date,name,protein:m.protein,carbs:m.carbs,fat:m.fat,cals:m.cals});
+  save();dismissOv(document.getElementById('serving-ov'));
+  toast(p.name+' logged!','green');
+  renderNutrition(document.getElementById('content'));
+  window._scanProduct=null;window._scanMacros=null;
 }
 // ═══════════════════════════════════════════════════
 // LIBRARY
