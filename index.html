@@ -210,10 +210,7 @@ textarea{resize:none;line-height:1.6}
   letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .1s;touch-action:manipulation}
 .chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
 /* ── BARCODE SCANNER ── */
-#scan-reader video{border-radius:12px;object-fit:cover}
-#scan-reader img[alt="Info icon"]{display:none!important}
-#scan-reader{position:relative}
-#qr-shaded-region{border-color:var(--navy)!important}
+#scan-video{background:#000}
 .ptabs{display:flex;border-bottom:1px solid var(--border);padding:0 14px;overflow-x:auto;scrollbar-width:none}
 .ptabs::-webkit-scrollbar{display:none}
 .ptab{flex-shrink:0;padding:11px 12px;font-size:11px;font-weight:700;letter-spacing:.06em;
@@ -343,7 +340,8 @@ textarea{resize:none;line-height:1.6}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border)}
 .cal-day-hdr{background:var(--bg);padding:6px 0;text-align:center;font-size:9px;font-weight:700;
   letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-.cal-cell{background:var(--card);padding:5px 3px;min-height:50px;cursor:pointer;transition:background .08s;touch-action:manipulation}
+.cal-cell{background:var(--card);padding:5px 3px;min-height:50px;cursor:pointer;transition:background .08s;touch-action:manipulation;position:relative}
+.cal-goal-tri{position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 9px 9px 0}
 .cal-cell:active{background:var(--bg2)}.cal-cell.empty{background:var(--bg);cursor:default}
 .cal-cell.today .cal-date{background:var(--navy);color:#fff;border-radius:50%;box-shadow:0 2px 6px rgba(27,51,83,.3)}
 .cal-cell.rest-day{background:rgba(27,51,83,.02)}
@@ -829,6 +827,8 @@ function load(){
   if(!S.starredFoods)S.starredFoods=[];
   if(!S.recentFoods)S.recentFoods=[];
   if(!S.recentSavedMeals)S.recentSavedMeals=[];
+  if(S.weightGoal===undefined)S.weightGoal=null;
+  if(S.weightGoalDir===undefined)S.weightGoalDir=null;
   if(S.activeCardDeck===undefined)S.activeCardDeck=null;
   if(S.activeSprintTimer===undefined)S.activeSprintTimer=null;
   if(S.calYear==null)S.calYear=new Date().getFullYear();
@@ -2073,6 +2073,7 @@ function renderCalendar(){
   S.workouts.forEach(w=>{const ds=new Date(w.started).toISOString().split('T')[0];if(!wkMap[ds])wkMap[ds]={w:0,a:0};wkMap[ds].w++;});
   S.activities.forEach(a=>{if(!wkMap[a.date])wkMap[a.date]={w:0,a:0};wkMap[a.date].a++;});
   const td=today();const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const calGoal=(S.macroGoals||{}).cals||0;
   // Planned routine dots for future days
   const routineDays={};
   (S.routines||[]).forEach(r=>{(r.days||[]).forEach(d=>{if(!routineDays[d])routineDays[d]=[];routineDays[d].push(r.name);});});
@@ -2092,7 +2093,19 @@ function renderCalendar(){
     const ovRid=S.schedule.routineOverrides&&S.schedule.routineOverrides[ds];
     const hasRoutineOverride=ovRid&&ovRid!=='rest';
     const isRestOverride=ovRid==='rest';
+    // Calorie goal indicator
+    let goalTri='';
+    if(calGoal&&ds<=td){
+      const dayCals=getDayTotals(ds).cals||0;
+      if(dayCals>0){
+        const over=dayCals>calGoal;
+        const within=Math.abs(dayCals-calGoal)/calGoal<=0.05;
+        const col=within?'var(--green)':over?'var(--red)':'var(--navy)';
+        goalTri=`<div class="cal-goal-tri" style="border-color:transparent ${col} transparent transparent" title="${Math.round(dayCals)} / ${calGoal} kcal"></div>`;
+      }
+    }
     html+=`<div class="cal-cell${isToday?' today':''}${(isRest||isRestOverride)?' rest-day':''}" onclick="calDayTap('${ds}')">
+      ${goalTri}
       <div class="cal-date" style="font-size:${isToday?'11px':'12px'}">${d}</div>
       <div class="cal-dots">
         ${Array(data.w).fill(0).map(()=>`<div class="cal-dot" style="background:var(--navy)"></div>`).join('')}
@@ -2109,7 +2122,12 @@ function renderCalendar(){
     <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-right:4px"></span>Activity</span>
     <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:transparent;border:1px solid var(--navy);margin-right:4px"></span>Planned</span>
     <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--border);margin-right:4px"></span>Rest</span>
-  </div>`;
+  </div>
+  ${calGoal?`<div style="padding:0 13px 10px;display:flex;gap:14px;font-size:10px;font-weight:600;color:var(--muted)">
+    <span><span style="display:inline-block;width:8px;height:8px;background:var(--green);margin-right:4px"></span>On goal</span>
+    <span><span style="display:inline-block;width:8px;height:8px;background:var(--navy);margin-right:4px"></span>Under</span>
+    <span><span style="display:inline-block;width:8px;height:8px;background:var(--red);margin-right:4px"></span>Over</span>
+  </div>`:''}`;
   return html;
 }
 function adjCal(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}if(S.calMonth<0){S.calMonth=11;S.calYear--;}renderHistory(document.getElementById('content'));}
@@ -2615,10 +2633,88 @@ function getDayTotals(ds){
   }
   return{...ml,fromMeals:false};
 }
+// Analyze bodyweight log: rate of change (lbs/week) over recent entries.
+function weightTrend(){
+  const log=(S.bodyweightLog||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(log.length<2)return null;
+  const newest=log[0],oldest=log[log.length-1];
+  const days=(new Date(newest.date)-new Date(oldest.date))/86400000;
+  if(days<1)return null;
+  const deltaLb=newest.weight-oldest.weight;
+  const perWeek=(deltaLb/days)*7;
+  return{current:newest.weight,deltaLb,days:Math.round(days),perWeek:r1(perWeek)};
+}
+// Average daily calorie intake over the last N logged days.
+function avgDailyIntake(n){
+  n=n||7;const vals=[];
+  for(let i=0;i<n;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const ds=d.toISOString().split('T')[0];
+    const cals=getDayTotals(ds).cals||0;
+    if(cals>0)vals.push(cals);
+  }
+  if(!vals.length)return 0;
+  return Math.round(vals.reduce((t,v)=>t+v,0)/vals.length);
+}
+function weightGoalCard(){
+  if(!S.weightGoal||!S.bodyweight)return '';
+  const cur=(S.bodyweightLog&&S.bodyweightLog[0]&&S.bodyweightLog[0].weight)||S.bodyweight;
+  const goal=S.weightGoal;const dir=S.weightGoalDir;
+  const diff=r1(cur-goal);const u=S.unit||'lbs';
+  const trend=weightTrend();
+  const tdee=baselineBurn();
+  const avgIn=avgDailyIntake(7);
+  let headline,sub,color,icon,bg,border;
+  // Determine if eating more or less is needed
+  if(Math.abs(diff)<0.5){
+    headline=`At your goal weight (${fmt1(cur)} ${u})`;
+    sub=avgIn?`Maintenance ≈ ${tdee} kcal/day. You're averaging ${avgIn}.`:`Maintenance ≈ ${tdee} kcal/day.`;
+    color='var(--green)';icon='🎯';bg='var(--grdim)';border='rgba(45,122,82,.2)';
+  }else if(cur<goal){
+    // Below goal — need to gain (eat more)
+    headline=`${fmt1(Math.abs(diff))} ${u} below your goal`;
+    const surplus=avgIn?(avgIn-tdee):null;
+    if(surplus!=null){
+      if(surplus>0)sub=`Eat more to reach ${fmt1(goal)} ${u}. You're at +${surplus} kcal/day over maintenance — on the right track.`;
+      else sub=`Eat more to reach ${fmt1(goal)} ${u}. You're ${Math.abs(surplus)} kcal/day under maintenance (${tdee}), which moves you away from your goal.`;
+    }else sub=`Eat above ${tdee} kcal/day to gain toward ${fmt1(goal)} ${u}.`;
+    color='var(--gold)';icon='⬆️';bg='var(--gdim)';border='rgba(184,124,42,.28)';
+  }else{
+    // Above goal — need to lose (eat less)
+    headline=`${fmt1(Math.abs(diff))} ${u} above your goal`;
+    const deficit=avgIn?(tdee-avgIn):null;
+    if(deficit!=null){
+      if(deficit>0)sub=`Eat less to reach ${fmt1(goal)} ${u}. You're at −${deficit} kcal/day under maintenance — on the right track.`;
+      else sub=`Eat less to reach ${fmt1(goal)} ${u}. You're ${Math.abs(deficit)} kcal/day over maintenance (${tdee}), which moves you away from your goal.`;
+    }else sub=`Eat below ${tdee} kcal/day to lose toward ${fmt1(goal)} ${u}.`;
+    color='var(--navy)';icon='⬇️';bg='var(--ndim)';border='var(--nbright)';
+  }
+  // Trend line
+  let trendLine='';
+  if(trend&&Math.abs(trend.perWeek)>=0.1){
+    const movingToward=(cur<goal&&trend.perWeek>0)||(cur>goal&&trend.perWeek<0)||(Math.abs(diff)<0.5&&Math.abs(trend.perWeek)<0.3);
+    const arrow=trend.perWeek>0?'gaining':'losing';
+    trendLine=`<div style="font-size:11px;color:var(--muted);margin-top:4px">Trend: ${arrow} ${fmt1(Math.abs(trend.perWeek))} ${u}/week over ${trend.days}d · ${movingToward?'<span style="color:var(--green);font-weight:600">moving toward goal</span>':'<span style="color:var(--red);font-weight:600">moving away from goal</span>'}</div>`;
+  }else if(trend){
+    trendLine=`<div style="font-size:11px;color:var(--muted);margin-top:4px">Weight stable over ${trend.days}d. Adjust intake to drive change.</div>`;
+  }else{
+    trendLine=`<div style="font-size:11px;color:var(--muted);margin-top:4px">Log your weight regularly to track progress.</div>`;
+  }
+  return`<div style="margin:0 13px 10px;padding:12px 13px;background:${bg};border:1px solid ${border};border-radius:10px">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="font-size:18px">${icon}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:${color}">${headline}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45">${sub}</div>
+        ${trendLine}
+      </div>
+    </div>
+  </div>`;
+}
 function renderNutrition(c){
   const td=today();const ml=getDayTotals(td);const g=S.macroGoals||{protein:150,carbs:200,fat:60,cals:2000};
   const todayMeals=(S.meals||[]).filter(m=>m.date===td);
-  const bar=(val,goal,color)=>{const pct=goal>0?Math.min(100,Math.round((val/goal)*100)):0;return`<div class="macro-bar-track"><div class="macro-bar-fill" style="width:${pct}%;background:${color}"></div></div><div style="font-size:9px;color:var(--muted);margin-top:1px">${val||0} / ${goal}</div>`;};
+  const bar=(val,goal,color)=>{const pct=goal>0?Math.min(100,Math.round((val/goal)*100)):0;return`<div class="macro-bar-track"><div class="macro-bar-fill" style="width:${pct}%;background:${color}"></div></div><div style="font-size:9px;color:var(--muted);margin-top:1px">${fmt1(val||0)} / ${goal}</div>`;};
   const hasMacros=!!(ml.protein||ml.carbs||ml.fat||ml.cals);
   const macroStreak=getMacroStreak();
 
@@ -2641,15 +2737,15 @@ function renderNutrition(c){
     <div class="cb">
     ${hasMacros?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Protein</div>
-        <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--navy)">${ml.protein||0}<span style="font-size:10px;opacity:.5">g</span></div>
+        <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--navy)">${fmt1(ml.protein||0)}<span style="font-size:10px;opacity:.5">g</span></div>
         ${bar(ml.protein||0,g.protein,'var(--navy)')}
       </div>
       <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Carbs</div>
-        <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--gold)">${ml.carbs||0}<span style="font-size:10px;opacity:.5">g</span></div>
+        <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--gold)">${fmt1(ml.carbs||0)}<span style="font-size:10px;opacity:.5">g</span></div>
         ${bar(ml.carbs||0,g.carbs,'var(--gold)')}
       </div>
       <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Fat</div>
-        <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--red)">${ml.fat||0}<span style="font-size:10px;opacity:.5">g</span></div>
+        <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--red)">${fmt1(ml.fat||0)}<span style="font-size:10px;opacity:.5">g</span></div>
         ${bar(ml.fat||0,g.fat,'var(--red)')}
       </div>
       <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Calories</div>
@@ -2711,18 +2807,18 @@ function renderNutrition(c){
         <div style="display:flex;align-items:center;padding:10px 13px;cursor:pointer;gap:8px" onclick="toggleMealGroup('${type}')">
           <div style="font-size:11px;color:var(--muted);transition:transform .15s;transform:rotate(${expanded?'90':'0'}deg)">▶</div>
           <div style="flex:1;font-size:14px;font-weight:600">${type}</div>
-          <div style="font-size:11px;color:var(--muted)">${[gp?'P'+Math.round(gp):null,gc?'C'+Math.round(gc):null,gf?'F'+Math.round(gf):null].filter(Boolean).join(' · ')}</div>
+          <div style="font-size:11px;color:var(--muted)">${[gp?'P'+fmt1(gp):null,gc?'C'+fmt1(gc):null,gf?'F'+fmt1(gf):null].filter(Boolean).join(' · ')}</div>
           <div class="mono" style="font-size:12px;font-weight:600;color:var(--navy)">${Math.round(gk)}kcal</div>
         </div>`;
       if(expanded){
         meals.forEach(m=>{
           const hasItems=m.items&&m.items.length;
-          const displayName=m.name&&m.name!==type?m.name:'';
+          const displayName=m.savedMealName||(m.name&&m.name!==type?m.name:'');
           html+=`<div style="padding:6px 13px 6px 30px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:6px">
             <div style="flex:1;min-width:0">
-              ${displayName?`<div style="font-size:12px;font-weight:600;margin-bottom:1px">${displayName}</div>`:''}
-              ${hasItems?`<div style="font-size:11px;color:var(--muted)">${m.items.map(it=>(it.qty>1?it.qty+'x ':'')+it.name).join(', ')}</div>`
-              :`<div style="font-size:11px;color:var(--muted)">P${Math.round(m.protein)||0}g · C${Math.round(m.carbs)||0}g · F${Math.round(m.fat)||0}g</div>`}
+              ${displayName?`<div style="font-size:12px;font-weight:600;margin-bottom:1px">${displayName}${m.savedMealName?` <span style="font-size:9px;color:var(--green);font-weight:700">MEAL</span>`:''}</div>`:''}
+              ${hasItems?`<div style="font-size:11px;color:var(--muted)">${m.items.map(it=>(it.qty>1?fmt1(it.qty)+'x ':'')+it.name).join(', ')}</div>`
+              :`<div style="font-size:11px;color:var(--muted)">P${fmt1(m.protein)||0}g · C${fmt1(m.carbs)||0}g · F${fmt1(m.fat)||0}g</div>`}
             </div>
             <div class="mono" style="font-size:11px;color:var(--muted);flex-shrink:0">${Math.round(m.cals)||0}kcal</div>
             <button class="ib delbtn" style="font-size:10px;flex-shrink:0" onclick="deleteMeal('${m.id}')">✕</button>
@@ -2753,7 +2849,9 @@ function renderNutrition(c){
     }
   }
 
-  // 5-day history
+  // Weight goal insight
+  html+=weightGoalCard();
+
   const recentDates=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i-1);return d.toISOString().split('T')[0];}).filter(ds=>{
     const meals=(S.meals||[]).filter(m=>m.date===ds);
     const hasMeals=meals.some(m=>m.protein||m.carbs||m.fat||m.cals);
@@ -2770,7 +2868,7 @@ function renderNutrition(c){
       const tot=getDayTotals(ds);
       html+=`<div class="hi" style="cursor:default"><div style="flex:1">
         <div class="hn">${fmtShort(ds+'T12:00:00')}</div>
-        <div class="hm">P ${tot.protein||0}g · C ${tot.carbs||0}g · F ${tot.fat||0}g${tot.fromMeals?` · ${(S.meals||[]).filter(m=>m.date===ds).length} meals`:''}</div>
+        <div class="hm">P ${fmt1(tot.protein||0)}g · C ${fmt1(tot.carbs||0)}g · F ${fmt1(tot.fat||0)}g${tot.fromMeals?` · ${(S.meals||[]).filter(m=>m.date===ds).length} meals`:''}</div>
       </div><div class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0">${tot.cals||0}kcal</div></div>`;
     });
     html+=`</div>`;
@@ -2839,18 +2937,51 @@ function saveMacros(){
 }
 function showMacroGoals(){
   const g=S.macroGoals||{protein:150,carbs:200,fat:60,cals:2000};
+  const curW=(S.bodyweightLog&&S.bodyweightLog[0]&&S.bodyweightLog[0].weight)||S.bodyweight||'';
   const ov=makeOv('mg-ov');
   ov.innerHTML=`<div class="modal"><div class="mh"></div><div class="mt">Daily Goals</div>
     <div class="fg"><label class="fl">Protein (g)</label><input type="number" inputmode="decimal" id="mg-pro" value="${g.protein}"></div>
     <div class="fg"><label class="fl">Carbs (g)</label><input type="number" inputmode="decimal" id="mg-carb" value="${g.carbs}"></div>
     <div class="fg"><label class="fl">Fat (g)</label><input type="number" inputmode="decimal" id="mg-fat" value="${g.fat}"></div>
     <div class="fg"><label class="fl">Calories</label><input type="number" inputmode="numeric" id="mg-cal" value="${g.cals}"></div>
-    <button class="btn btp bfw" onclick="saveMacroGoals()">Save Goals</button>
+    <div style="border-top:1px solid var(--border);margin:14px -16px;padding:14px 16px 0">
+      <div class="ct" style="margin-bottom:10px">Weight Goal</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <div class="fg" style="margin-bottom:0"><label class="fl">Target (${S.unit||'lbs'})</label><input type="number" inputmode="decimal" id="mg-wgoal" value="${S.weightGoal||''}" placeholder="e.g. 180"></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Current</label><input type="number" inputmode="decimal" id="mg-wcur" value="${curW}" placeholder="${curW||'185'}"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="chip${S.weightGoalDir==='lose'?' on':''}" id="wgd-lose" onclick="selWeightDir('lose')">Lose</button>
+        <button class="chip${S.weightGoalDir==='maintain'?' on':''}" id="wgd-maintain" onclick="selWeightDir('maintain')">Maintain</button>
+        <button class="chip${S.weightGoalDir==='gain'?' on':''}" id="wgd-gain" onclick="selWeightDir('gain')">Gain</button>
+      </div>
+    </div>
+    <button class="btn btp bfw" style="margin-top:14px" onclick="saveMacroGoals()">Save Goals</button>
     <button class="btn btg bfw" style="margin-top:7px" onclick="dismissOv(document.getElementById('mg-ov'))">Cancel</button>
   </div>`;
   document.body.appendChild(ov);attachSwipeDown(ov);
+  window._wgDir=S.weightGoalDir||null;
 }
-function saveMacroGoals(){S.macroGoals={protein:parseFloat(document.getElementById('mg-pro')?.value)||150,carbs:parseFloat(document.getElementById('mg-carb')?.value)||200,fat:parseFloat(document.getElementById('mg-fat')?.value)||60,cals:parseInt(document.getElementById('mg-cal')?.value)||2000};save();dismissOv(document.getElementById('mg-ov'));toast('Goals updated','green');renderNutrition(document.getElementById('content'));}
+function selWeightDir(d){
+  window._wgDir=d;
+  ['lose','maintain','gain'].forEach(x=>document.getElementById('wgd-'+x)?.classList.toggle('on',x===d));
+}
+function saveMacroGoals(){
+  S.macroGoals={protein:parseFloat(document.getElementById('mg-pro')?.value)||150,carbs:parseFloat(document.getElementById('mg-carb')?.value)||200,fat:parseFloat(document.getElementById('mg-fat')?.value)||60,cals:parseInt(document.getElementById('mg-cal')?.value)||2000};
+  const wgoal=parseFloat(document.getElementById('mg-wgoal')?.value);
+  const wcur=parseFloat(document.getElementById('mg-wcur')?.value);
+  if(!isNaN(wgoal))S.weightGoal=wgoal;else S.weightGoal=null;
+  S.weightGoalDir=window._wgDir||null;
+  if(!isNaN(wcur)){
+    S.bodyweight=wcur;
+    if(!S.bodyweightLog)S.bodyweightLog=[];
+    const td=today();
+    const existing=S.bodyweightLog.find(b=>b.date===td);
+    if(existing)existing.weight=wcur;
+    else S.bodyweightLog.unshift({date:td,weight:wcur});
+  }
+  save();dismissOv(document.getElementById('mg-ov'));toast('Goals updated','green');renderNutrition(document.getElementById('content'));
+}
 
 // ═══════════════════════════════════════════════════
 // MEAL BUILDER (multi-item)
@@ -3000,7 +3131,7 @@ function renderFoodRow(f){
     <button class="ib" style="font-size:14px;flex-shrink:0;margin-right:6px;color:${isStarred(f.id)?'var(--gold)':'var(--muted2)'}" onclick="event.stopPropagation();toggleStar('${f.id}');renderFoodTab()">★</button>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
-      <div style="font-size:11px;color:var(--muted)">P${Math.round(f.protein)}g · C${Math.round(f.carbs)}g · F${Math.round(f.fat)}g</div>
+      <div style="font-size:11px;color:var(--muted)">P${fmt1(f.protein)}g · C${fmt1(f.carbs)}g · F${fmt1(f.fat)}g</div>
     </div>
     <div style="flex-shrink:0;text-align:right">
       <div class="mono" style="font-size:12px;font-weight:600;color:var(--navy)">${Math.round(f.cals)}kcal</div>
@@ -3066,7 +3197,7 @@ function updateMealItems(){
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--hair)">
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.name}</div>
-        <div style="font-size:10px;color:var(--muted)">P${Math.round(ip)}g C${Math.round(ic)}g F${Math.round(ifat)}g</div>
+        <div style="font-size:10px;color:var(--muted)">P${fmt1(ip)}g C${fmt1(ic)}g F${fmt1(ifat)}g</div>
       </div>
       <button class="ib" style="font-size:13px;font-weight:700;width:28px;height:28px" onclick="adjMealItem(${i},-0.5)">−</button>
       <div class="mono" style="font-size:13px;font-weight:600;width:24px;text-align:center">${it.qty%1===0?it.qty:it.qty.toFixed(1)}</div>
@@ -3114,8 +3245,13 @@ function doSaveMealWithType(mealType){
       return{foodId:it.foodId,name:it.name,qty:it.qty,serving:it.serving,protein:ip,carbs:ic,fat:ifat,cals:ik};
     });
     if(hasManual){tp+=mp;tc+=mc;tf+=mf;tk+=(mCals||Math.round(mp*4+mc*4+mf*9));}
-    if(window._loggedSavedMealId){trackRecentMeal(window._loggedSavedMealId);window._loggedSavedMealId=null;}
-    S.meals.push({id:uid(),date,type:mealType,name:mealType,items,protein:r1(tp),carbs:r1(tc),fat:r1(tf),cals:Math.round(tk)});
+    let savedMealName=null;
+    if(window._loggedSavedMealId){
+      const sm=(S.savedMeals||[]).find(c=>c.id===window._loggedSavedMealId);
+      if(sm)savedMealName=sm.name;
+      trackRecentMeal(window._loggedSavedMealId);window._loggedSavedMealId=null;
+    }
+    S.meals.push({id:uid(),date,type:mealType,name:mealType,savedMealName,items,protein:r1(tp),carbs:r1(tc),fat:r1(tf),cals:Math.round(tk)});
   }else{
     const cals=mCals||Math.round(mp*4+mc*4+mf*9);
     S.meals.push({id:uid(),date,type:mealType,name:mealType,protein:mp,carbs:mc,fat:mf,cals});
@@ -3155,19 +3291,26 @@ function deleteMeal(id){
 // ═══════════════════════════════════════════════════
 // BARCODE SCANNER + OPEN FOOD FACTS
 // ═══════════════════════════════════════════════════
-let _scanLibLoaded=false,_html5Qr=null;
+// ─── Barcode scanner state declared below ───
 function loadScannerLib(){
   return new Promise((resolve,reject)=>{
-    if(_scanLibLoaded){resolve();return;}
+    if(window.ZXing){resolve();return;}
     const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
-    s.onload=()=>{_scanLibLoaded=true;resolve();};
+    s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    s.onload=()=>resolve();
     s.onerror=()=>reject(new Error('Failed to load scanner library'));
     document.head.appendChild(s);
   });
 }
+let _zxingReader=null,_scanStream=null,_scanLoopActive=false,_nativeDetector=null;
+function makeZxingReader(){
+  const Z=window.ZXing;
+  if(!Z)return null;
+  const Reader=Z.BrowserMultiFormatReader||Z.BrowserBarcodeReader||Z.BrowserCodeReader;
+  if(!Reader)return null;
+  try{return new Reader();}catch(e){return null;}
+}
 function showBarcodeScanner(){
-  // Close meal modal if open (but preserve items)
   const mealOv=document.getElementById('meal-ov');
   if(mealOv){
     window._scanReturnToMeal=true;
@@ -3178,11 +3321,16 @@ function showBarcodeScanner(){
     window._scanReturnToMeal=false;
   }
   const ov=makeOv('scan-ov');
+  ov.addEventListener('click',e=>{if(e.target===ov)teardownScanner();});
   ov.innerHTML=`<div class="modal" style="max-height:96vh;padding-bottom:calc(30px + var(--sb))">
     <div class="mh"></div>
     <div class="mt">Scan Barcode</div>
-    <div id="scan-reader" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px;position:relative"></div>
-    <div id="scan-status" style="text-align:center;padding:12px;font-size:13px;color:var(--muted)">Loading camera…</div>
+    <div style="width:100%;border-radius:12px;overflow:hidden;background:#000;position:relative;aspect-ratio:4/3">
+      <video id="scan-video" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover;display:block"></video>
+      <div style="position:absolute;left:8%;right:8%;top:42%;height:16%;border:2px solid rgba(255,255,255,.85);border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.25);pointer-events:none"></div>
+      <div style="position:absolute;left:8%;right:8%;top:50%;height:2px;background:var(--red);box-shadow:0 0 8px var(--red);pointer-events:none"></div>
+    </div>
+    <div id="scan-status" style="text-align:center;padding:12px;font-size:13px;color:var(--muted)">Starting camera…</div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="btn btp" style="flex:1;gap:6px" onclick="captureAndScan()"><span style="font-size:14px">⏸</span> Freeze + Scan</button>
     </div>
@@ -3196,61 +3344,107 @@ function showBarcodeScanner(){
 }
 async function startScanner(){
   const statusEl=document.getElementById('scan-status');
+  const video=document.getElementById('scan-video');
+  if(!video)return;
   try{
-    await loadScannerLib();
-    _html5Qr=new Html5Qrcode('scan-reader');
+    // Get camera stream first (works without any library)
+    _scanStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},
+      audio:false
+    });
+    video.srcObject=_scanStream;
+    await video.play().catch(()=>{});
     if(statusEl)statusEl.textContent='Point camera at a barcode…';
-    await _html5Qr.start(
-      {facingMode:'environment'},
-      {fps:15,qrbox:{width:280,height:150},
-       experimentalFeatures:{useBarCodeDetectorIfSupported:true}},
-      onBarcodeDetected,
-      ()=>{}
-    );
+    // Prefer native BarcodeDetector — fast, no library needed
+    if('BarcodeDetector' in window){
+      try{
+        const formats=await BarcodeDetector.getSupportedFormats();
+        const want=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf'].filter(f=>formats.includes(f));
+        if(want.length){
+          _nativeDetector=new BarcodeDetector({formats:want});
+          _scanLoopActive=true;
+          nativeScanLoop();
+          return;
+        }
+      }catch(e){console.warn('Native detector init failed',e);}
+    }
+    // Fallback to ZXing continuous decode
+    await loadScannerLib();
+    _zxingReader=makeZxingReader();
+    if(!_zxingReader){throw new Error('ZXing not available');}
+    _scanLoopActive=true;
+    _zxingReader.decodeFromVideoElementContinuously(video,(result,err)=>{
+      if(result&&_scanLoopActive){
+        _scanLoopActive=false;
+        onBarcodeDetected(result.getText());
+      }
+    });
   }catch(e){
     console.error('Scanner error:',e);
-    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">Camera unavailable — try entering the code manually</div>';
+    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">Camera unavailable — check permissions or enter the code manually</div>';
   }
 }
+async function nativeScanLoop(){
+  const video=document.getElementById('scan-video');
+  if(!video||!_scanLoopActive||!_nativeDetector)return;
+  try{
+    if(video.readyState>=2){
+      const codes=await _nativeDetector.detect(video);
+      if(codes.length&&_scanLoopActive){
+        _scanLoopActive=false;
+        onBarcodeDetected(codes[0].rawValue);
+        return;
+      }
+    }
+  }catch(e){}
+  if(_scanLoopActive)requestAnimationFrame(nativeScanLoop);
+}
+function teardownScanner(){
+  _scanLoopActive=false;
+  if(_zxingReader){try{_zxingReader.reset();}catch(e){}_zxingReader=null;}
+  _nativeDetector=null;
+  if(_scanStream){_scanStream.getTracks().forEach(t=>t.stop());_scanStream=null;}
+}
 function stopScanner(){
-  if(_html5Qr){_html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  teardownScanner();
   const ov=document.getElementById('scan-ov');
   if(ov)dismissOv(ov);
 }
 async function captureAndScan(){
-  const video=document.querySelector('#scan-reader video');
+  const video=document.getElementById('scan-video');
   const statusEl=document.getElementById('scan-status');
-  if(!video){if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">No camera feed available</div>';return;}
-  // Freeze the frame
-  if(_html5Qr){await _html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  if(!video||!video.videoWidth){if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">No camera feed yet — wait a moment</div>';return;}
+  _scanLoopActive=false;
   const canvas=document.createElement('canvas');
   canvas.width=video.videoWidth;canvas.height=video.videoHeight;
   canvas.getContext('2d').drawImage(video,0,0);
   if(statusEl)statusEl.innerHTML='<div style="color:var(--navy);font-weight:600">Analyzing frame…</div>';
-  // Try native BarcodeDetector
-  if(typeof BarcodeDetector!=='undefined'){
+  // Native first
+  if('BarcodeDetector' in window){
     try{
-      const det=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39']});
+      const det=_nativeDetector||new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf']});
       const results=await det.detect(canvas);
       if(results.length){onBarcodeDetected(results[0].rawValue);return;}
     }catch(e){}
   }
-  // Fallback: html5-qrcode file scan
+  // ZXing single-frame decode
   try{
-    const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
-    if(!blob)throw new Error('no blob');
-    const file=new File([blob],'frame.png',{type:'image/png'});
-    const result=await Html5Qrcode.scanFileV2(file,false);
-    onBarcodeDetected(result.decodedText);
+    await loadScannerLib();
+    const reader=makeZxingReader();
+    if(!reader)throw new Error('ZXing not available');
+    const dataUrl=canvas.toDataURL('image/png');
+    const result=await reader.decodeFromImageUrl(dataUrl);
+    onBarcodeDetected(result.getText());
   }catch(e){
-    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">No barcode detected — reposition and try again</div>';
-    // Restart live scanner
-    setTimeout(startScanner,1200);
+    if(statusEl)statusEl.innerHTML='<div style="color:var(--red)">No barcode detected — center it in the box and try again</div>';
+    _scanLoopActive=true;
+    if(_nativeDetector)nativeScanLoop();
+    else if(_zxingReader){const v=document.getElementById('scan-video');if(v)_zxingReader.decodeFromVideoElementContinuously(v,(r)=>{if(r&&_scanLoopActive){_scanLoopActive=false;onBarcodeDetected(r.getText());}});}
   }
 }
 function showManualBarcode(){
   const statusEl=document.getElementById('scan-status');if(!statusEl)return;
-  if(_html5Qr){_html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  _scanLoopActive=false;
   statusEl.innerHTML=`<div style="display:flex;gap:8px;margin-top:4px">
     <input type="text" id="manual-barcode" inputmode="numeric" placeholder="Enter barcode number" style="flex:1;font-size:15px">
     <button class="btn btp bsm" onclick="submitManualBarcode()">Look up</button>
@@ -3263,7 +3457,7 @@ function submitManualBarcode(){
   onBarcodeDetected(code);
 }
 async function onBarcodeDetected(barcode){
-  if(_html5Qr){await _html5Qr.stop().catch(()=>{});_html5Qr=null;}
+  teardownScanner();
   const statusEl=document.getElementById('scan-status');
   if(statusEl)statusEl.innerHTML=`<div style="font-weight:600;color:var(--navy)">Found: ${barcode}</div><div style="margin-top:4px;font-size:12px">Looking up product…</div>`;
   if(!S.foodCache)S.foodCache={};
@@ -3382,6 +3576,7 @@ function scanQtyAdj(d){
   updateScanMacros();
 }
 function r1(v){return Math.round(v*10)/10;}
+function fmt1(v){const n=Math.round((parseFloat(v)||0)*10)/10;return n%1===0?String(n):n.toFixed(1);}
 function calcScanMacros(){
   const p=window._scanProduct;if(!p)return null;
   const mode=window._scanMode;const qty=parseFloat(document.getElementById('scan-qty')?.value)||1;
@@ -3407,11 +3602,11 @@ function updateScanMacros(){
   const el=document.getElementById('scan-macros');if(!el)return;
   el.innerHTML=`
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Protein</div>
-      <div class="mono" style="font-size:20px;font-weight:600;color:var(--navy)">${Math.round(m.protein)}<span style="font-size:10px;opacity:.5">g</span></div></div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--navy)">${fmt1(m.protein)}<span style="font-size:10px;opacity:.5">g</span></div></div>
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Carbs</div>
-      <div class="mono" style="font-size:20px;font-weight:600;color:var(--gold)">${Math.round(m.carbs)}<span style="font-size:10px;opacity:.5">g</span></div></div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--gold)">${fmt1(m.carbs)}<span style="font-size:10px;opacity:.5">g</span></div></div>
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Fat</div>
-      <div class="mono" style="font-size:20px;font-weight:600;color:var(--red)">${Math.round(m.fat)}<span style="font-size:10px;opacity:.5">g</span></div></div>
+      <div class="mono" style="font-size:20px;font-weight:600;color:var(--red)">${fmt1(m.fat)}<span style="font-size:10px;opacity:.5">g</span></div></div>
     <div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Calories</div>
       <div class="mono" style="font-size:20px;font-weight:600;color:var(--green)">${m.cals}<span style="font-size:10px;opacity:.5">kcal</span></div></div>`;
 }
@@ -4280,6 +4475,10 @@ function importData(){
         if(!S.savedMeals)S.savedMeals=[];
         if(!S.starredFoods)S.starredFoods=[];
         if(!S.recentFoods)S.recentFoods=[];
+        if(!S.recentSavedMeals)S.recentSavedMeals=[];
+        if(!S.foodCache)S.foodCache={};
+        if(S.weightGoal===undefined)S.weightGoal=null;
+        if(S.weightGoalDir===undefined)S.weightGoalDir=null;
         save();applyDark();
         document.getElementById('set-ov')?.remove();
         render();toast('Data imported!','green');
