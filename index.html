@@ -3740,6 +3740,11 @@ function showBarcodeScanner(){
 async function startScanner(){
   const video=document.getElementById('scan-video');
   if(!video)return;
+  // Defensive: clear any stale state from a previous session
+  _zxingReader=null;_scanLoopActive=false;
+  if(_scanStream){_scanStream.getTracks().forEach(t=>t.stop());_scanStream=null;}
+  // Brief delay lets iOS Safari fully release the camera from a prior session
+  await new Promise(r=>setTimeout(r,150));
   try{
     setScanStatus('Requesting camera…');
     _scanStream=await navigator.mediaDevices.getUserMedia({
@@ -3812,7 +3817,13 @@ function teardownScanner(){
   _scanLoopActive=false;
   if(_torchTrack&&_torchOn){try{_torchTrack.applyConstraints({advanced:[{torch:false}]});}catch(e){}}
   _torchTrack=null;_torchOn=false;
-  if(_zxingReader){try{_zxingReader.reset();}catch(e){}_zxingReader=null;}
+  // Don't call _zxingReader.reset() — it internally stops the stream which
+  // causes iOS Safari to return dead streams on the next getUserMedia call.
+  // Just drop the reference; the callback guard (_scanLoopActive=false) prevents firing.
+  _zxingReader=null;
+  // Explicitly detach srcObject before stopping tracks — iOS needs this sequence.
+  const vid=document.getElementById('scan-video');
+  if(vid)vid.srcObject=null;
   if(_scanStream){_scanStream.getTracks().forEach(t=>t.stop());_scanStream=null;}
 }
 function stopScanner(){
